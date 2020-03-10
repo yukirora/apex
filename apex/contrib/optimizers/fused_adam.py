@@ -191,7 +191,8 @@ class FusedAdam(torch.optim.Optimizer):
                     state['step'] += 1
                     step = state['step']
 
-                out_p = torch.tensor([], dtype = torch.float) if output_param is None else output_param
+                if not undo:
+                    out_p = torch.tensor([], dtype = torch.float) if output_param is None else output_param
                 if self._use_multi_tensor:
                     pl = [p.data, exp_avg, exp_avg_sq, grad]
                     if output_param is not None:
@@ -253,7 +254,7 @@ class FusedAdam(torch.optim.Optimizer):
                     bias_correction,
                     group['weight_decay'])
 
-        return loss
+        return None if undo else loss
 
     def step(self, closure=None, grads=None, output_params=None, scale=1., grad_norms=None):
         """Performs a single optimization step.
