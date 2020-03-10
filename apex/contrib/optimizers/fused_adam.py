@@ -28,6 +28,10 @@ class FusedAdam(torch.optim.Optimizer):
             second moment estimate as in the original paper. (default: False)
         use_mt (boolean, optional): use multi tensor apply for lower launch
             latency. (default: False)
+        allow_undo (boolean, optional): allow a step() to be undone automatically
+            when overflow is detected in the gradient. This means step() method
+            can be called without checking gradient for NaN/Inf first.
+            (default: False)
 
     .. _Adam\: A Method for Stochastic Optimization:
         https://arxiv.org/abs/1412.6980
@@ -39,7 +43,7 @@ class FusedAdam(torch.optim.Optimizer):
                  lr=1e-3, bias_correction = True,
                  betas=(0.9, 0.999), eps=1e-8, eps_inside_sqrt = False,
                  weight_decay=0., max_grad_norm=0., amsgrad=False, use_mt=False,
-                 amp_scale_adjustment=1.0):
+                 amp_scale_adjustment=1.0, allow_undo=False):
         global fused_adam_cuda
         fused_adam_cuda = importlib.import_module("fused_adam_cuda")
 
@@ -61,24 +65,51 @@ class FusedAdam(torch.optim.Optimizer):
         super(FusedAdam, self).__init__(params, defaults)
         self.eps_mode = 0 if  eps_inside_sqrt else 1
 
-    def step(self, closure=None, grads=None, output_params=None, scale=1., grad_norms=None):
-        """Performs a single optimization step.
+        self._allow_undo = allow_undo
+        if not self._use_multi_tensor:
+            self._overflow_buf = torch.cuda.IntTensor([0])
+        else:
+            assert (not self._allow_undo), "Undo feature not supported with multi_tensor mode"
 
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-            grads (list of tensors, optional): weight gradient to use for the
-                optimizer update. If gradients have type torch.half, parameters
-                are expected to be in type torch.float. (default: None)
-            output params (list of tensors, optional): A reduced precision copy
-                of the updated weights written out in addition to the regular
-                updated weights. Have to be of same type as gradients. (default: None)
-            scale (float, optional): factor to divide gradient tensor values
-                by before applying to weights. (default: 1)
+    @property
+    def has_overflow(self):
+        """Check if overflows were detected by any call to step(...) method.
+        Clears the overflow flag.
         """
-        loss = None
-        if closure is not None:
-            loss = closure()
+        has_overflow = self._overflow_buf.item()
+        self._overflow_buf.zero_()
+        return has_overflow
+
+    @property
+    def peek_overflow(self):
+        """Check if overflows were detected by any call to step(...) method.
+        Does not clear overflow flag.
+        """
+        return self._overflow_buf.item()
+
+    def strided_check_finite(self, output_params, stride=1, start=-1, end=-1, clear=True):
+        """Strided check for overflow.
+        You can get status by calling has_overflow.
+        """
+        if start >= 0 and start < end:
+            out_p = output_params[start:end]
+        else:
+            out_p = output_params
+        fused_adam_cuda.strided_check_finite(self._overflow_buf,
+                out_p,
+                stride,
+                1 if clear else 0)
+
+    def _step(self, closure, grads, output_params, scale, grad_norms, undo):
+        """Performs a single optimization step.
+        """
+        if undo:
+            assert (self._allow_undo), "Called _step(undo=True) but undo is not supported"
+            assert (not self._use_multi_tensor), "Revert step does not support multi tensor"
+        else:
+            loss = None
+            if closure is not None:
+                loss = closure()
 
         if hasattr(self, "_amp_stash"):
             grads = self._amp_stash.grads
@@ -153,7 +184,12 @@ class FusedAdam(torch.optim.Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
 
-                state['step'] += 1
+                if undo:
+                    step = state['step']
+                    state['step'] -= 1
+                else:
+                    state['step'] += 1
+                    step = state['step']
 
                 out_p = torch.tensor([], dtype = torch.float) if output_param is None else output_param
                 if self._use_multi_tensor:
@@ -164,20 +200,43 @@ class FusedAdam(torch.optim.Optimizer):
                     for tl, t in zip(tensorlists, pl):
                         tl.append(t)
                 else:
-                    fused_adam_cuda.adam(p.data,
-                                         out_p,
-                                         exp_avg,
-                                         exp_avg_sq,
-                                         grad,
-                                         group['lr'],
-                                         beta1,
-                                         beta2,
-                                         group['eps'],
-                                         combined_scale,
-                                         state['step'],
-                                         self.eps_mode,
-                                         bias_correction,
-                                         group['weight_decay'])
+                    if undo:
+                        fused_adam_cuda.adam_undo(
+                                             p.data,
+                                             p.data,
+                                             exp_avg,
+                                             exp_avg,
+                                             exp_avg_sq,
+                                             exp_avg_sq,
+                                             grad,
+                                             group['lr'],
+                                             beta1,
+                                             beta2,
+                                             group['eps'],
+                                             combined_scale,
+                                             step,
+                                             self.eps_mode,
+                                             bias_correction,
+                                             group['weight_decay'])
+                    else:
+                        fused_adam_cuda.adam(self._overflow_buf,
+                                             p.data,
+                                             p.data,
+                                             out_p,
+                                             exp_avg,
+                                             exp_avg,
+                                             exp_avg_sq,
+                                             exp_avg_sq,
+                                             grad,
+                                             group['lr'],
+                                             beta1,
+                                             beta2,
+                                             group['eps'],
+                                             combined_scale,
+                                             step,
+                                             self.eps_mode,
+                                             bias_correction,
+                                             group['weight_decay'])
 
             if self._use_multi_tensor:
                 multi_tensor_applier(
@@ -195,3 +254,25 @@ class FusedAdam(torch.optim.Optimizer):
                     group['weight_decay'])
 
         return loss
+
+    def step(self, closure=None, grads=None, output_params=None, scale=1., grad_norms=None):
+        """Performs a single optimization step.
+
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+            grads (list of tensors, optional): weight gradient to use for the
+                optimizer update. If gradients have type torch.half, parameters
+                are expected to be in type torch.float. (default: None)
+            output params (list of tensors, optional): A reduced precision copy
+                of the updated weights written out in addition to the regular
+                updated weights. Have to be of same type as gradients. (default: None)
+            scale (float, optional): factor to divide gradient tensor values
+                by before applying to weights. (default: 1)
+        """
+        self._overflow_buf.zero_()
+        loss = self._step(closure, grads, output_params, scale, grad_norms, False)
+        if self._allow_undo and self.peek_overflow:
+            # revert step
+            self._step(closure, grads, output_params, scale, grad_norms, True)
+
