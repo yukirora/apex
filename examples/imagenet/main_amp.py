@@ -16,6 +16,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 import numpy as np
+import pdb
 
 try:
     from apex.parallel import DistributedDataParallel as DDP
@@ -130,7 +131,6 @@ def main():
         memory_format = torch.channels_last
     else:
         memory_format = torch.contiguous_format
-
     # create model
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
@@ -170,7 +170,9 @@ def main():
         # model = DDP(model)
         # delay_allreduce delays all communication to the end of the backward pass.
         model = DDP(model, delay_allreduce=True)
-
+        #model = torch.nn.parallel.DistributedDataParallel(model,
+        #                                               device_ids=[args.local_rank],
+        #                                               output_device=args.local_rank)
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
@@ -211,16 +213,18 @@ def main():
             # transforms.ToTensor(), Too slow
             # normalize,
         ]))
+    """
     val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
             transforms.Resize(val_size),
             transforms.CenterCrop(crop_size),
         ]))
+    """
 
     train_sampler = None
     val_sampler = None
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-        val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
+        #val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
 
     collate_fn = lambda b: fast_collate(b, memory_format)
 
@@ -228,6 +232,7 @@ def main():
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, collate_fn=collate_fn)
 
+    """
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size, shuffle=False,
@@ -238,18 +243,20 @@ def main():
     if args.evaluate:
         validate(val_loader, model, criterion)
         return
-
+    """
+    #prefetcher = data_prefetcher(train_loader)
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch)
-
+        #torch.cuda.empty_cache()
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+        #prec1 = validate(val_loader, model, criterion)
 
         # remember best prec@1 and save checkpoint
+        """
         if args.local_rank == 0:
             is_best = prec1 > best_prec1
             best_prec1 = max(prec1, best_prec1)
@@ -260,6 +267,7 @@ def main():
                 'best_prec1': best_prec1,
                 'optimizer' : optimizer.state_dict(),
             }, is_best)
+        """
 
 class data_prefetcher():
     def __init__(self, loader):
@@ -288,7 +296,9 @@ class data_prefetcher():
         # at the time we start copying to next_*:
         # self.stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(self.stream):
+            #print("copying input to device, input shape:{}, input type: {}". format(self.next_input.shape, self.next_input.type()))
             self.next_input = self.next_input.cuda(non_blocking=True)
+            #print("copying target to device, target shape:{}, input type: {}". format(self.next_target.shape, self.next_target.type()))
             self.next_target = self.next_target.cuda(non_blocking=True)
             # more code for the alternative if record_stream() doesn't work:
             # copy_ will record the use of the pinned source tensor in this side stream.
@@ -301,6 +311,7 @@ class data_prefetcher():
             # if args.fp16:
             #     self.next_input = self.next_input.half()
             # else:
+            #print("processing inputs")
             self.next_input = self.next_input.float()
             self.next_input = self.next_input.sub_(self.mean).div_(self.std)
 
@@ -309,12 +320,13 @@ class data_prefetcher():
         input = self.next_input
         target = self.next_target
         if input is not None:
+            #print("recording input")
             input.record_stream(torch.cuda.current_stream())
         if target is not None:
+            #print("recording target")
             target.record_stream(torch.cuda.current_stream())
         self.preload()
         return input, target
-
 
 def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
@@ -328,8 +340,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     prefetcher = data_prefetcher(train_loader)
     input, target = prefetcher.next()
+
     i = 0
-    while input is not None:
+    num_iters=10
+    #while input is not None:
+    while num_iters > 0:
+        num_iters = num_iters - 1
+        #pdb.set_trace()
+        print("============ Epoch : {}, Iter : {} ==========".format(epoch, i))
+        #print("mem occupied by tensors: ", torch.cuda.memory_allocated()/(2**30))
+        #print("mem reserved by allocator: ", torch.cuda.memory_reserved()/(2**30))
         i += 1
         if args.prof >= 0 and i == args.prof:
             print("Profiling begun at iteration {}".format(i))
