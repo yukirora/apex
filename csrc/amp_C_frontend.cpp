@@ -144,6 +144,18 @@ void multi_tensor_lamb_mp_cuda(
   at::Tensor found_inf,
   at::Tensor inv_scale);
 
+void multi_tensor_larc_cuda(
+  int chunk_size,
+  at::Tensor noop_flag,
+  std::vector<std::vector<at::Tensor>> tensor_lists,
+  at::Tensor grad_norms,
+  at::Tensor param_norms,
+  const float lr,
+  const float trust_coefficient,
+  const float epsilon,
+  const float weight_decay,
+  const bool clip);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("multi_tensor_scale", &multi_tensor_scale_cuda,
         "Fused overflow check + scale for a list of contiguous tensors");
@@ -171,4 +183,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "Computes and apply update for LAMB optimizer");
   m.def("multi_tensor_lamb_mp", &multi_tensor_lamb_mp_cuda,
         "Computes and apply update for LAMB optimizer");
+  m.def("multi_tensor_larc", &multi_tensor_larc_cuda,
+        "Computes new gradients using LARC");
 }
