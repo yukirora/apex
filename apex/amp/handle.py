@@ -10,6 +10,7 @@ from ._amp_state import _amp_state, master_params, maybe_print
 
 if torch.distributed.is_available():
     from ..parallel.LARC import LARC
+    from ..parallel.fused_larc import FusedLARC
 
 
 # There's no reason to expose the notion of a "handle". Everything can happen through amp.* calls.
@@ -87,7 +88,8 @@ def scale_loss(loss,
         yield loss
         return
 
-    if isinstance(optimizers, torch.optim.Optimizer) or ('LARC' in globals() and isinstance(optimizers, LARC)):
+    if isinstance(optimizers, torch.optim.Optimizer) or \
+            ('LARC' in globals() and (isinstance(optimizers, LARC) or isinstance(optimizers, FusedLARC))):
         optimizers = [optimizers]
 
     loss_scaler = _amp_state.loss_scalers[loss_id]
