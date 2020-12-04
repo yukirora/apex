@@ -9,7 +9,7 @@
 #define BLOCK_SIZE 512
 #define ILP 4
 
-template<typename T>
+template<typename T_grad, typename T_weight>
 struct LARCFunctor
 {
    __device__ __forceinline__ void operator()(
@@ -33,10 +33,10 @@ struct LARCFunctor
     }
     n = min(n, chunk_size);
 
-    T* g = (T*) tl->addresses[0][tensor_loc];
+    T_grad* g = (T_grad*) tl->addresses[0][tensor_loc];
     g += chunk_idx * chunk_size;
 
-    T* p = (T*) tl->addresses[1][tensor_loc];
+    T_weight* p = (T_weight*) tl->addresses[1][tensor_loc];
     p += chunk_idx * chunk_size;
 
     int tensor_offset = tl->start_tensor_this_launch + tensor_loc;
@@ -87,21 +87,61 @@ void multi_tensor_larc_cuda(
 {
   using namespace at;
 
-  DISPATCH_DOUBLE_FLOAT_AND_HALF_AND_BFLOAT16(
-    tensor_lists[0][0].scalar_type(), 0, "larc",
-    multi_tensor_apply<2>(
-      BLOCK_SIZE,
-      chunk_size,
-      noop_flag,
-      tensor_lists,
-      LARCFunctor<scalar_t_0>(),
-      grad_norms.DATA_PTR<float>(),
-      param_norms.DATA_PTR<float>(),
-      lr,
-      trust_coefficient,
-      epsilon,
-      weight_decay,
-      clip);)
+  auto grad_type = tensor_lists[0][0].scalar_type();
+  auto weight_type = tensor_lists[1][0].scalar_type();
+
+  if (grad_type == at::ScalarType::Float &&
+      weight_type == at::ScalarType::Float) {
+      multi_tensor_apply<2>(
+          BLOCK_SIZE,
+          chunk_size,
+          noop_flag,
+          tensor_lists,
+          LARCFunctor<float, float>(),
+          grad_norms.DATA_PTR<float>(),
+          param_norms.DATA_PTR<float>(),
+          lr,
+          trust_coefficient,
+          epsilon,
+          weight_decay,
+          clip);
+  }
+  else if (grad_type == at::ScalarType::Half &&
+           weight_type == at::ScalarType::Half) {
+      multi_tensor_apply<2>(
+          BLOCK_SIZE,
+          chunk_size,
+          noop_flag,
+          tensor_lists,
+          LARCFunctor<at::Half, at::Half>(),
+          grad_norms.DATA_PTR<float>(),
+          param_norms.DATA_PTR<float>(),
+          lr,
+          trust_coefficient,
+          epsilon,
+          weight_decay,
+          clip);
+  }
+  else if (grad_type == at::ScalarType::Half &&
+           weight_type == at::ScalarType::Float) {
+      multi_tensor_apply<2>(
+          BLOCK_SIZE,
+          chunk_size,
+          noop_flag,
+          tensor_lists,
+          LARCFunctor<at::Half, float>(),
+          grad_norms.DATA_PTR<float>(),
+          param_norms.DATA_PTR<float>(),
+          lr,
+          trust_coefficient,
+          epsilon,
+          weight_decay,
+          clip);
+  }
+  else {
+    AT_ERROR("multi_tensor_larc only supports some combinations of gradient & weight types. Given: ",
+             "gradient: ", grad_type, ", weight: ", weight_type);
+  }
 
   AT_CUDA_CHECK(cudaGetLastError());
 }
