@@ -27,10 +27,7 @@ struct LARCFunctor
 
     int chunk_idx = tl->block_to_chunk[blockIdx.x];
     int n = tl->sizes[tensor_loc];
-    int num_chunks = (n * chunk_size - 1) / chunk_size;
-    if (num_chunks - 1 == chunk_idx && n % chunk_size != 0) {
-      chunk_size = n % chunk_size;
-    }
+    n -= chunk_idx * chunk_size;
     n = min(n, chunk_size);
 
     T_grad* g = (T_grad*) tl->addresses[0][tensor_loc];
@@ -54,8 +51,7 @@ struct LARCFunctor
         for (int i = i_start + threadIdx.x;
             i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
             i += blockDim.x) {
-          g[i] += weight_decay * p[i];
-          g[i] = static_cast<float>(g[i]) * adaptive_lr;
+          g[i] = (g[i] + (weight_decay * p[i])) * adaptive_lr;
         }
       }
     }
@@ -66,7 +62,7 @@ struct LARCFunctor
         for (int i = i_start + threadIdx.x;
             i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
             i += blockDim.x) {
-          g[i] = static_cast<float>(g[i]) * adaptive_lr;
+          g[i] *= adaptive_lr;
         }
       }
     }
