@@ -40,29 +40,31 @@ struct LARCFunctor
     float g_norm = grad_norms[tensor_offset];
     float p_norm = param_norms[tensor_offset];
 
-    float adaptive_lr = trust_coefficient * p_norm / (g_norm + p_norm * weight_decay + epsilon);
-    if (clip) {
-      adaptive_lr = min(adaptive_lr / lr, 1);
-    }
+    if (g_norm != 0.0f && p_norm != 0.0f) {
+      float adaptive_lr = trust_coefficient * p_norm / (g_norm + p_norm * weight_decay + epsilon);
+      if (clip) {
+        adaptive_lr = min(adaptive_lr / lr, 1);
+      }
 
-    if (weight_decay != 0.0f) {
-      for (int i_start = 0; i_start < n; i_start += blockDim.x * ILP) {
+      if (weight_decay != 0.0f) {
+        for (int i_start = 0; i_start < n; i_start += blockDim.x * ILP) {
 #pragma unroll
-        for (int i = i_start + threadIdx.x;
-            i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
-            i += blockDim.x) {
-          g[i] = (g[i] + (weight_decay * p[i])) * adaptive_lr;
+          for (int i = i_start + threadIdx.x;
+              i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
+              i += blockDim.x) {
+            g[i] = (g[i] + (weight_decay * p[i])) * adaptive_lr;
+          }
         }
       }
-    }
-    else {
-      // Avoid reading p when weight decay = 0.0f
-      for (int i_start = 0; i_start < n; i_start += blockDim.x * ILP) {
+      else {
+        // Avoid reading p when weight decay = 0.0f
+        for (int i_start = 0; i_start < n; i_start += blockDim.x * ILP) {
 #pragma unroll
-        for (int i = i_start + threadIdx.x;
-            i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
-            i += blockDim.x) {
-          g[i] *= adaptive_lr;
+          for (int i = i_start + threadIdx.x;
+              i < i_start + threadIdx.x + ILP * blockDim.x && i < n;
+              i += blockDim.x) {
+            g[i] *= adaptive_lr;
+          }
         }
       }
     }
