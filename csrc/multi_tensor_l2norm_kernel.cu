@@ -16,7 +16,11 @@
 
 template<typename T>
 __device__ __forceinline__ bool is_aligned(T* p){
+#ifdef __HIP_PLATFORM_HCC__
+  return false;
+#else
   return ((uint64_t)p) % (ILP*sizeof(T)) == 0;
+#endif
 }
 
 template<typename T>
