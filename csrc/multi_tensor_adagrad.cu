@@ -10,7 +10,11 @@
 #include "multi_tensor_apply.cuh"
 #include "type_shim.h"
 
+#ifdef __HIP_PLATFORM_HCC__
+#define BLOCK_SIZE 512
+#else
 #define BLOCK_SIZE 1024
+#endif
 #define ILP 4
 
 typedef enum {
