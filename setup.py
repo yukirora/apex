@@ -51,7 +51,7 @@ elif not torch.cuda.is_available() and IS_ROCM_PYTORCH:
     print('\nWarning: Torch did not find available GPUs on this system.\n',
           'If your intention is to cross-compile, this is not an error.\n'
           'By default, Apex will cross-compile for the same gfx targets\n'
-          'used by default in ROCm PyTorch\n'
+          'used by default in ROCm PyTorch\n')
 
 print("\n\ntorch.__version__  = {}\n\n".format(torch.__version__))
 TORCH_MAJOR = int(torch.__version__.split('.')[0])
