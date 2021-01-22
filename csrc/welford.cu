@@ -12,7 +12,7 @@
 #include "compat.h"
 
 #if defined __HIP_PLATFORM_HCC__
-#define SHFL_DOWN __shfl_down
+#define SHFL_DOWN(mask,val,i) __shfl_down(val, i)
 #else
 #define SHFL_DOWN __shfl_down_sync
 #endif
@@ -44,8 +44,11 @@ __host__ __forceinline__ int h_last_pow2(unsigned int n) {
     return n - (n >> 1);
 }
 
-
+#ifdef __HIP_PLATFORM_HCC__
+#define WARP_SIZE 64
+#else
 #define WARP_SIZE 32
+#endif
 
 template<typename T>
 __device__ __forceinline__ T warp_reduce_sum(T val)
@@ -61,25 +64,27 @@ __device__ __forceinline__ T reduce_block(T *x, T val)
 {
   int tid = threadIdx.y*blockDim.x + threadIdx.x;
   int blockSize = blockDim.x * blockDim.y;
+  int lane = tid % WARP_SIZE;
+  int wid = tid / WARP_SIZE;
 
-  if (blockSize > 32) {
+  if (blockSize > WARP_SIZE) {
     val = warp_reduce_sum(val);
-    if (tid % WARP_SIZE == 0)
-      x[tid/WARP_SIZE] = val;
+    if (lane == 0)
+      x[wid] = val;
 
     __syncthreads();
 
-    val = (tid < blockSize / WARP_SIZE? x[tid%WARP_SIZE] : T(0));
+    val = (tid < blockSize / WARP_SIZE? x[lane] : T(0));
   }
 
-  if(tid/WARP_SIZE==0) val = warp_reduce_sum(val);
+  if(wid==0) val = warp_reduce_sum(val);
 
   return val;
 }
 
 #define ELEMENTS_PER_ITER 4 // enables concurrency within each thread to hide latency
 #define ELEMENTS_PER_THREAD 16
-#define OPTIMAL_TILE_W 32
+#define OPTIMAL_TILE_W WARP_SIZE
 #define MAX_H_BLOCK 128
 #define MAX_BLOCK_SIZE 512
 
@@ -137,11 +142,7 @@ __device__ __forceinline__ void warp_reduce_mean_m2n(T &mean, T &m2n, int &num)
     auto num_new = SHFL_DOWN(0xffffffff, num, i);
     auto mean_new = SHFL_DOWN(0xffffffff, mean, i);
     auto m2n_new = SHFL_DOWN(0xffffffff, m2n, i);
-#if defined __HIP_PLATFORM_HCC__
-    welford_merge_element<T, int>(num, mean, m2n, num_new, mean_new, m2n_new);
-#else
     welford_merge_element(num, mean, m2n, num_new, mean_new, m2n_new);
-#endif
   }
 }
 
@@ -158,7 +159,7 @@ __device__ void welford_reduce_mean_m2n(
   int lane = thread_id % WARP_SIZE;
   int wid = thread_id / WARP_SIZE;
 
-  if (block_size > 32) {
+  if (block_size > WARP_SIZE) {
     warp_reduce_mean_m2n(mean, m2n, num);
     if (lane == 0) {
       x[wid*2] = mean;
@@ -291,8 +292,8 @@ __global__ void welford_kernel(
     }
   }
 
-  static __shared__ int s_mem[160];
-  accscalar_t* s_mem_ac = (accscalar_t*) &s_mem[32];
+  static __shared__ int s_mem[MAX_BLOCK_SIZE/WARP_SIZE];
+  static __shared__ accscalar_t s_mem_ac[MAX_BLOCK_SIZE/WARP_SIZE*2];
 
   welford_reduce_mean_m2n<accscalar_t>(s_mem_ac, s_mem, x_mean, m_2_n, count, block_size, thread_id);
 
@@ -343,7 +344,7 @@ __global__ void reduce_bn_kernel(
       const int bs,
       const int fs,
       const int ss) {
-  static __shared__ int s_mem[64];
+  static __shared__ int s_mem[WARP_SIZE];
   //int total_item_num = bs * ss;
 
   int thread_id = threadIdx.y*blockDim.x + threadIdx.x;
@@ -921,7 +922,7 @@ std::vector<at::Tensor> welford_mean_var_CUDA(const at::Tensor input) {
   at::Tensor out_var_biased = at::empty({feature_size}, input.options().dtype(scalar_type));
   at::Tensor out_mean = at::empty({feature_size}, input.options().dtype(scalar_type));
 
-  int block_y = min(h_last_pow2(batch_size), int(MAX_BLOCK_SIZE / 32));
+  int block_y = min(h_last_pow2(batch_size), int(MAX_BLOCK_SIZE / WARP_SIZE));
   int block_x = max(1, min(MAX_BLOCK_SIZE / block_y, h_last_pow2(space_size)));
   const dim3 block(block_x, block_y);
   const dim3 grid(feature_size);
@@ -957,7 +958,7 @@ at::Tensor batchnorm_forward_CUDA(
 
   auto space_size = get_tensor_spatial_size(input);
 
-  int block_x = max(32, min(MAX_BLOCK_SIZE, h_last_pow2(space_size)/4));
+  int block_x = max(WARP_SIZE, min(MAX_BLOCK_SIZE, h_last_pow2(space_size)/4));
   int block_y = max(1, min(MAX_BLOCK_SIZE/block_x, h_last_pow2(batch_size)/4));
   const dim3 block(block_x, block_y);
   int grid_z = max(1, min(65535, h_last_pow2(space_size)/4/block_x));
@@ -1030,7 +1031,7 @@ std::vector<at::Tensor> reduce_bn_CUDA(
 
   auto space_size = get_tensor_spatial_size(input);
 
-  int block_y = min(h_last_pow2(batch_size), int(MAX_BLOCK_SIZE/ 32));
+  int block_y = min(h_last_pow2(batch_size), int(MAX_BLOCK_SIZE/ WARP_SIZE));
   int block_x = max(1, min(MAX_BLOCK_SIZE/ block_y, h_last_pow2(space_size)));
   const dim3 block(block_x, block_y);
   const dim3 grid(feature_size);
@@ -1097,7 +1098,7 @@ at::Tensor batchnorm_backward_CUDA(
 
   auto space_size = get_tensor_spatial_size(input);
 
-  int block_x = max(32, min(MAX_BLOCK_SIZE, h_last_pow2(space_size)/4));
+  int block_x = max(WARP_SIZE, min(MAX_BLOCK_SIZE, h_last_pow2(space_size)/4));
   int block_y = max(1, min(MAX_BLOCK_SIZE/block_x, h_last_pow2(batch_size)/4));
   const dim3 block(block_x, block_y);
   int grid_z = max(1, min(65535, h_last_pow2(space_size)/4/block_x));
