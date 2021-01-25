@@ -114,7 +114,6 @@ void multi_tensor_apply(
         auto storage = at::empty(sizeof(tl), c10::TensorOptions(at::kStrided).dtype(at::kByte).device(at::kCPU).pinned_memory(true));
         auto tl_as_host_pinned_ptr = static_cast<decltype(tl)*>(storage.data_ptr());
         memcpy(tl_as_host_pinned_ptr, &tl, sizeof(tl));
-        AT_CUDA_CHECK(THCCachingHostAllocator_recordEvent(tl_as_host_pinned_ptr, stream));
         // using accscalar_t = acc_type<scalar_t, true>;
         multi_tensor_apply_kernel<<<loc_block_info, block_size, 0, stream>>>(
           chunk_size,
@@ -124,6 +123,7 @@ void multi_tensor_apply(
           args...);
 
         AT_CUDA_CHECK(cudaGetLastError());
+        AT_CUDA_CHECK(THCCachingHostAllocator_recordEvent(tl_as_host_pinned_ptr, stream));
 
         // Reset.  The control flow possibilities here make my brain hurt.
         loc_block_info = 0;
