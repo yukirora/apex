@@ -187,7 +187,7 @@ if "--cuda_ext" in sys.argv:
 
         print ("INFO: Building the multi-tensor apply extension.")
         nvcc_args_multi_tensor = ['-lineinfo', '-O3', '--use_fast_math'] + version_dependent_macros
-        hipcc_args_multi_tensor = ['-O3'] + version_dependent_macros
+        hipcc_args_multi_tensor = ['-O3', '--amdgpu-target=gfx90a'] + version_dependent_macros
         ext_modules.append(
             CUDAExtension(name='amp_C',
                           sources=['csrc/amp_C_frontend.cpp',
@@ -201,7 +201,7 @@ if "--cuda_ext" in sys.argv:
                                    'csrc/multi_tensor_adagrad.cu',
                                    'csrc/multi_tensor_novograd.cu',
                                    'csrc/multi_tensor_lamb.cu'],
-                          extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                          extra_compile_args={'cxx': ['-O3',] + version_dependent_macros,
                                               'nvcc': nvcc_args_multi_tensor if not IS_ROCM_PYTORCH else hipcc_args_multi_tensor}))
 
         print ("INFO: Building syncbn extension.")
@@ -210,10 +210,10 @@ if "--cuda_ext" in sys.argv:
                           sources=['csrc/syncbn.cpp',
                                    'csrc/welford.cu'],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
-                                              'nvcc':['-O3'] + version_dependent_macros}))
+                                              'nvcc':['-O3','--amdgpu-target=gfx90a'] + version_dependent_macros}))
 
         nvcc_args_layer_norm = ['-maxrregcount=50', '-O3', '--use_fast_math'] + version_dependent_macros
-        hipcc_args_layer_norm = ['-O3'] + version_dependent_macros
+        hipcc_args_layer_norm = ['-O3','--amdgpu-target=gfx90a'] + version_dependent_macros
         print ("INFO: Building fused layernorm extension.")
         ext_modules.append(
             CUDAExtension(name='fused_layer_norm_cuda',
@@ -228,7 +228,7 @@ if "--cuda_ext" in sys.argv:
                           sources=['csrc/mlp.cpp',
                                    'csrc/mlp_cuda.cu'],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
-                                              'nvcc':['-O3'] + version_dependent_macros}))
+                                              'nvcc':['-O3','--amdgpu-target=gfx90a'] + version_dependent_macros}))
 
 if "--bnp" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
