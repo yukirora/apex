@@ -184,6 +184,9 @@ if "--cuda_ext" in sys.argv:
     else:
         if not IS_ROCM_PYTORCH:
             check_cuda_torch_binary_vs_bare_metal(torch.utils.cpp_extension.CUDA_HOME)
+        elif "--bnp" in sys.argv:
+            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm.h > apex/contrib/csrc/groupbn/batch_norm_hip.h')
+            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm_add_relu.h > apex/contrib/csrc/groupbn/batch_norm_add_relu_hip.h')
 
         print ("INFO: Building the multi-tensor apply extension.")
         nvcc_args_multi_tensor = ['-lineinfo', '-O3', '--use_fast_math'] + version_dependent_macros
@@ -237,9 +240,14 @@ if "--bnp" in sys.argv:
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
 
-    if torch.utils.cpp_extension.CUDA_HOME is None:
+    if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--bnp was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
     else:
+        if IS_ROCM_PYTORCH:
+            extra_args = ['-U__HIP_NO_HALF_CONVERSIONS__']
+            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm.h > apex/contrib/csrc/groupbn/batch_norm_hip.h')
+            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm_add_relu.h > apex/contrib/csrc/groupbn/batch_norm_add_relu_hip.h')
+
         ext_modules.append(
             CUDAExtension(name='bnp',
                           sources=['apex/contrib/csrc/groupbn/batch_norm.cu',
@@ -251,7 +259,7 @@ if "--bnp" in sys.argv:
                                               'nvcc':['-DCUDA_HAS_FP16=1',
                                                       '-D__CUDA_NO_HALF_OPERATORS__',
                                                       '-D__CUDA_NO_HALF_CONVERSIONS__',
-                                                      '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros}))
+                                                      '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros + extra_args}))
 
 if "--xentropy" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
