@@ -27,7 +27,7 @@
 #define MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_ADD_RELU_H_
 
 #ifdef __HIP_PLATFORM_HCC__
-#include <miopen/version.h>
+#include <miopen/miopen.h>
 #else
 #include <cudnn.h>
 #endif
