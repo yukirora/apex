@@ -1,0 +1,1 @@
+sh scripts/amd/build.sh

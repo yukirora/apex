@@ -26,7 +26,9 @@
 #ifndef MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_H_
 #define MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_H_
 
-#include <cudnn.h>
+#ifdef __HIP_PLATFORM_HCC__
+#include <miopen/version.h>
+#endif
 
 #include <algorithm>
 #include <vector>
