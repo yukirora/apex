@@ -28,6 +28,8 @@
 
 #ifdef __HIP_PLATFORM_HCC__
 #include <miopen/version.h>
+#else
+#include <cudnn.h>
 #endif
 
 #include <algorithm>
