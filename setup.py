@@ -184,9 +184,6 @@ if "--cuda_ext" in sys.argv:
     else:
         if not IS_ROCM_PYTORCH:
             check_cuda_torch_binary_vs_bare_metal(torch.utils.cpp_extension.CUDA_HOME)
-        elif "--bnp" in sys.argv:
-            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm.h > apex/contrib/csrc/groupbn/batch_norm_hip.h')
-            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm_add_relu.h > apex/contrib/csrc/groupbn/batch_norm_add_relu_hip.h')
 
         print ("INFO: Building the multi-tensor apply extension.")
         nvcc_args_multi_tensor = ['-lineinfo', '-O3', '--use_fast_math'] + version_dependent_macros
@@ -245,8 +242,6 @@ if "--bnp" in sys.argv:
     else:
         if IS_ROCM_PYTORCH:
             extra_args = ['-U__HIP_NO_HALF_CONVERSIONS__']
-            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm.h > apex/contrib/csrc/groupbn/batch_norm_hip.h')
-            os.system('hipify-perl apex/contrib/csrc/groupbn/batch_norm_add_relu.h > apex/contrib/csrc/groupbn/batch_norm_add_relu_hip.h')
 
         ext_modules.append(
             CUDAExtension(name='bnp',
@@ -254,7 +249,8 @@ if "--bnp" in sys.argv:
                                    'apex/contrib/csrc/groupbn/ipc.cu',
                                    'apex/contrib/csrc/groupbn/interface.cpp',
                                    'apex/contrib/csrc/groupbn/batch_norm_add_relu.cu'],
-                          include_dirs=[os.path.join(this_dir, 'csrc')],
+                          include_dirs=[os.path.join(this_dir, 'csrc'),
+                                        os.path.join(this_dir, 'apex/contrib/csrc/groupbn')],
                           extra_compile_args={'cxx': [] + version_dependent_macros,
                                               'nvcc':['-DCUDA_HAS_FP16=1',
                                                       '-D__CUDA_NO_HALF_OPERATORS__',
