@@ -2,3 +2,6 @@
 	path = apex/contrib/csrc/multihead_attn/cutlass
 	url = https://github.com/NVIDIA/cutlass.git
 	branch = v1.2.0
+[submodule "third_party/hipify-torch"]
+	path = third_party/hipify-torch
+	url = https://github.com/ROCmSoftwarePlatform/hipify-torch
