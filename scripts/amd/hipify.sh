@@ -1,1 +1,1 @@
-git submodule add https://github.com/micmelesse/hipify-torch third_party/hipify-torch
+git submodule add https://github.com/ROCmSoftwarePlatform/hipify-torch third_party/hipify-torch
