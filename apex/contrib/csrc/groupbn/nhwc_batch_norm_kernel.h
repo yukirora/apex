@@ -58,9 +58,10 @@ DEVICE_FUNCTION void from_float(int (&dst)[N], const float (&src)[2*N]) {
     #pragma unroll
     for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
-        asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(lo) : "f"(src[2*i+0]));
-        asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(hi) : "f"(src[2*i+1]));
-        asm volatile("mov.b32 %0, {%1, %2};"  : "=r"(dst[i]) : "h"(lo), "h"(hi));
+        // asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(lo) : "f"(src[2*i+0]));
+        // asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(lo) : "f"(src[2*i+0]));
+        // asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(hi) : "f"(src[2*i+1]));
+        // asm volatile("mov.b32 %0, {%1, %2};"  : "=r"(dst[i]) : "h"(lo), "h"(hi));
     }
 }
 
@@ -81,9 +82,9 @@ DEVICE_FUNCTION void to_float(float (&dst)[2*N], int (&src)[N]) {
     #pragma unroll
     for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
-        asm volatile("mov.b32 {%0, %1}, %2;" : "=h"(lo), "=h"(hi) : "r"(src[i]));
-        asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+0])   : "h"(lo));
-        asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+1])   : "h"(hi));
+        // asm volatile("mov.b32 {%0, %1}, %2;" : "=h"(lo), "=h"(hi) : "r"(src[i]));
+        // asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+0])   : "h"(lo));
+        // asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+1])   : "h"(hi));
     }
 }
 
@@ -107,7 +108,7 @@ DEVICE_FUNCTION void ldg(int (&dst)[1], const uint16_t *gmem) {
 
 DEVICE_FUNCTION void ldg_stream(int (&dst)[1], const uint16_t *gmem) {
     unsigned int tmp;
-    asm volatile ("ld.global.cs.nc.s32 %0, [%1];"  : "=r"(tmp) : "l" ((const uint *)gmem));
+    // asm volatile ("ld.global.cs.nc.s32 %0, [%1];"  : "=r"(tmp) : "l" ((const uint *)gmem));
     dst[0] = tmp;
 }
 
@@ -123,8 +124,8 @@ DEVICE_FUNCTION void ldg(int (&dst)[2], const uint16_t *gmem) {
 
 DEVICE_FUNCTION void ldg_stream(int (&dst)[2], const uint16_t *gmem) {
     int2 tmp;
-    asm volatile ("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];"
-        : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2 *)gmem));
+    // asm volatile ("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];"
+    //     : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2 *)gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
@@ -157,8 +158,8 @@ DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[1]) {
 
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[1]) {
     unsigned int tmp = src[0];
-    asm volatile ("st.global.cs.s32 [%0], %1;"
-        :: "l"((uint *)gmem) , "r"(tmp));
+    // asm volatile ("st.global.cs.s32 [%0], %1;"
+    //     :: "l"((uint *)gmem) , "r"(tmp));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -170,8 +171,8 @@ DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[2]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[2]) {
-    asm volatile ("st.global.cs.v2.s32 [%0], {%1,%2};"
-        :: "l"((uint *)gmem) , "r"(src[0]), "r"( src[1]));
+    // asm volatile ("st.global.cs.v2.s32 [%0], {%1,%2};"
+    //     :: "l"((uint *)gmem) , "r"(src[0]), "r"( src[1]));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,7 +391,7 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
 
     #pragma unroll
     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-        x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
+        // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
     }
 
     // The warp leaders, write to SMEM.
@@ -417,11 +418,11 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
         }
 
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-            x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
+            // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
         }
 
         // Make sure the data was read from SMEM.
-        __syncwarp();
+        // __syncwarp();
 
         // Store the final values.
         if (threadIdx.x < THREADS_PER_PIXEL) {
@@ -444,11 +445,11 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
                     &((reinterpret_cast<float*>(params_pair_data))[data_offset]);
 
                 // write the data to memory region to be reflected to other GPU
-                asm volatile ("st.global.wt.v4.b32 [%0], {%1,%2,%3,%4};"
-                    :: "l"(write_data) , "f"(x[0]), "r"(magic), "f"(x[2]), "r"(magic));
+                // asm volatile ("st.global.wt.v4.b32 [%0], {%1,%2,%3,%4};"
+                //     :: "l"(write_data) , "f"(x[0]), "r"(magic), "f"(x[2]), "r"(magic));
 
-                asm volatile ("st.global.wt.v4.b32 [%0], {%1,%2,%3,%4};"
-                    :: "l"(write_data+4) , "f"(x[1]), "r"(magic), "f"(x[3]), "r"(magic));
+                // asm volatile ("st.global.wt.v4.b32 [%0], {%1,%2,%3,%4};"
+                //     :: "l"(write_data+4) , "f"(x[1]), "r"(magic), "f"(x[3]), "r"(magic));
             }
 
             // now each CTA (on each GPU) reads the data written by CTA 0 of the other GPU
@@ -458,13 +459,13 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
             float other[4];
             uint32_t other_flag_a, other_flag_b;
             do {
-                asm volatile ("ld.volatile.global.v4.b32 {%0, %1, %2, %3}, [%4];"
-                    : "=f"(other[0]), "=r"(other_flag_a), "=f"(other[2]), "=r"(other_flag_b) : "l"(read_data));
+                // asm volatile ("ld.volatile.global.v4.b32 {%0, %1, %2, %3}, [%4];"
+                //     : "=f"(other[0]), "=r"(other_flag_a), "=f"(other[2]), "=r"(other_flag_b) : "l"(read_data));
             } while ((other_flag_a != magic) || (other_flag_b != magic));
 
             do {
-                asm volatile ("ld.volatile.global.v4.b32 {%0, %1, %2, %3}, [%4];"
-                    : "=f"(other[1]), "=r"(other_flag_a), "=f"(other[3]), "=r"(other_flag_b) : "l"(read_data+4));
+                // asm volatile ("ld.volatile.global.v4.b32 {%0, %1, %2, %3}, [%4];"
+                //     : "=f"(other[1]), "=r"(other_flag_a), "=f"(other[3]), "=r"(other_flag_b) : "l"(read_data+4));
             } while ((other_flag_a != magic) || (other_flag_b != magic));
 
             add(x, other);
@@ -496,8 +497,8 @@ DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
 
     #pragma unroll
     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-        x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
-        x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL*2+lane_id);
+        // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
+        // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL*2+lane_id);
     }
 
     // The warp leaders, write to SMEM.
@@ -524,12 +525,12 @@ DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
         }
 
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-            x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
-            x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL*2+lane_id);
+            // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
+            // x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL*2+lane_id);
         }
 
         // Make sure the data was read from SMEM.
-        __syncwarp();
+        // __syncwarp();
 
         // Store the final values.
         if (threadIdx.x < THREADS_PER_PIXEL) {
@@ -560,7 +561,7 @@ DEVICE_FUNCTION void parallel_sums(float *smem, float (&x)[ELEMENTS_PER_LDG], in
     // Compute the parallel sums.
     for (int offset = PIXELS_PER_WARP/2; offset > 0; offset /= 2) {
         // NOP.
-        __syncwarp();
+        // __syncwarp();
 
         // Read the running sum from the other thread.
         float y[ELEMENTS_PER_LDG];
@@ -572,7 +573,7 @@ DEVICE_FUNCTION void parallel_sums(float *smem, float (&x)[ELEMENTS_PER_LDG], in
         add(x, y);
 
         // NOP.
-        __syncwarp();
+        // __syncwarp();
 
         // Update the sum in SMEM.
         if (offset > 1 && nhw_in_warp < offset) {
@@ -600,7 +601,7 @@ DEVICE_FUNCTION void parallel_sums(float *smem, float (&x)[ELEMENTS_PER_LDG], in
     // We have the running mean and running m2. Let's build the mean/var of the CTA.
     for (int offset = WARPS_PER_CTA/2; offset > 0; offset /= 2) {
         // NOP.
-        __syncwarp();
+        // __syncwarp();
 
         // Read the mean and variance from the other pixel.
         float y[ELEMENTS_PER_LDG];
@@ -612,7 +613,7 @@ DEVICE_FUNCTION void parallel_sums(float *smem, float (&x)[ELEMENTS_PER_LDG], in
         add(x, y);
 
         // NOP.
-        __syncwarp();
+        // __syncwarp();
 
         // Store the mean/var for the different pixels.
         if (nhw < offset) {
@@ -684,8 +685,8 @@ DEVICE_FUNCTION void inter_block_sync(int* gmem_retired_ctas, int expected_count
         int retired_ctas = -1;
         do {
             __threadfence();
-            asm volatile ("ld.global.cg.b32 %0, [%1];"
-                : "=r"(retired_ctas) : "l"(gmem_retired_ctas));
+            // asm volatile ("ld.global.cg.b32 %0, [%1];"
+            //     : "=r"(retired_ctas) : "l"(gmem_retired_ctas));
         } while (retired_ctas != 0);
     }
     __syncthreads();
@@ -1294,7 +1295,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     #pragma unroll
                     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
                         bool rectified = x_math[i] < 0.0F;
-                        unsigned int local_relu_mask = __ballot_sync(0xFFFFFFFFU, rectified);
+                        unsigned int local_relu_mask =rectified; //__ballot_sync(0xFFFFFFFFU, rectified);
                         if (lane_id == i) {
                             // Thread 0 remembers the relu_mask from the first time through this
                             // loop, Thread 1 the next, Thread 2 the next, and Thread 3 the last.
@@ -1357,7 +1358,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     #pragma unroll
                     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
                         bool rectified = x_math[i] < 0.0F;
-                        unsigned int local_relu_mask = __ballot_sync(0xFFFFFFFFU, rectified);
+                         unsigned int local_relu_mask =rectified; //__ballot_sync(0xFFFFFFFFU, rectified);
                         if (lane_id == i) {
                             relu_mask = local_relu_mask;
                         }
@@ -2403,8 +2404,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                 bool rectified[ELEMENTS_PER_LDG];
                 #pragma unroll
                 for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                    rectified[j] = ((__shfl_sync(0xFFFFFFFFU, relu_mask[i], j) &
-                                    (1U << lane_id)) != 0);
+                    // rectified[j] = ((__shfl_sync(0xFFFFFFFFU, relu_mask[i], j) &
+                    //                 (1U << lane_id)) != 0);
                 }
                 to_float(x_math, x_storage[i]);
                 to_float(dy_math, dy_storage[i]);
@@ -2460,8 +2461,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                 bool rectified[ELEMENTS_PER_LDG];
                 #pragma unroll
                 for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                    rectified[j] = ((__shfl_sync(0xFFFFFFFFU, relu_mask, j) &
-                                    (1U << lane_id)) != 0);
+                    // rectified[j] = ((__shfl_sync(0xFFFFFFFFU, relu_mask, j) &
+                    //                 (1U << lane_id)) != 0);
                 }
 
                 // The offset to store in SMEM.
