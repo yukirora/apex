@@ -68,7 +68,7 @@ class NhwcBatchNormAddRelu {
   dim3 calc_fwd_grid(int *loop, const int grid_dim_x);
   dim3 calc_bwd_grid(int *loop, const int grid_dim_x);
 
-  void setInputDescriptor(const cudnnTensorFormat_t format,
+  void setInputDescriptor(const miopenTensorFormat_t format,
                                   const miopenDataType_t     data_type,
                                   int n, int c, int h, int w, int bn_group) {
     m_ = n * h * w;
@@ -83,7 +83,7 @@ class NhwcBatchNormAddRelu {
     setTensorDescriptor(X_tensor_desc_, format, data_type, n, c, h, w);
   }
 
-  void setOutputDescriptor(const cudnnTensorFormat_t format,
+  void setOutputDescriptor(const miopenTensorFormat_t format,
                                    const miopenDataType_t     data_type,
                                    int n, int c, int h, int w) {
     setTensorDescriptor(Y_tensor_desc_, format, data_type, n, c, h, w);
@@ -192,11 +192,11 @@ class NhwcBatchNormAddRelu {
 
  private:
   void setTensorDescriptor(miopenTensorDescriptor_t descriptor,
-                           cudnnTensorFormat_t format,
+                           miopenTensorFormat_t format,
                            miopenDataType_t     data_type,
                            int n, int c, int h, int w) {
     miopenStatus_t status = miopenStatusSuccess;
-    status = cudnnSetTensor4dDescriptor(descriptor, format, data_type, n, c, h, w);
+    status = miopenSet4dTensorDescriptor(descriptor, data_type, n, c, h, w);
     processCudnnStatus(status, "set tensor descriptor");
   }
 
@@ -284,8 +284,8 @@ class NhwcBatchNormAddRelu {
                         USE_ADD_RELU, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            cudaFuncSetAttribute(fwd_func, cudaFuncAttributePreferredSharedMemoryCarveout, 100); \
-            checkCudaStatus(name_ + " fwd ser coop kernel (cudaFuncSetAttribute carveout)"); \
+            hipFuncSetAttribute(fwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
+            checkCudaStatus(name_ + " fwd ser coop kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
         using FWD_FUNC = decltype(nhwc_batch_norm_fwd< \
@@ -301,14 +301,14 @@ class NhwcBatchNormAddRelu {
                         USE_ADD_RELU, \
                         COMPILED_FOR_OCCUPANCY>); \
         if (COOP) { \
-            cudaLaunchCooperativeKernel<FWD_FUNC>(fwd_func, \
+            hipLaunchCooperativeKernel<FWD_FUNC>(fwd_func, \
                 grid_dim, \
                 THREADS_PER_CTA, \
                 &params_ptr, \
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
-            cudaLaunchKernel<FWD_FUNC>(fwd_func, \
+            hipLaunchKernel<FWD_FUNC>(fwd_func, \
                 grid_dim, \
                 THREADS_PER_CTA, \
                 &params_ptr, \
@@ -352,10 +352,10 @@ class NhwcBatchNormAddRelu {
                         OUTER_LOOPS, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            cudaFuncSetAttribute(bwd_add_relu_func, \
-                             cudaFuncAttributePreferredSharedMemoryCarveout, 100); \
+            hipFuncSetAttribute(bwd_add_relu_func, \
+                             hipFuncAttributePreferredSharedMemoryCarveout, 100); \
             checkCudaStatus(name_ + \
-                " bwd-add-relu coop serial kernel (cudaFuncSetAttribute carveout)"); \
+                " bwd-add-relu coop serial kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
         using BWD_ADD_RELU_FUNC = decltype(nhwc_batch_norm_bwd_add_relu< \
@@ -369,14 +369,14 @@ class NhwcBatchNormAddRelu {
                         OUTER_LOOPS, \
                         COMPILED_FOR_OCCUPANCY>); \
         if (COOP) { \
-            cudaLaunchCooperativeKernel<BWD_ADD_RELU_FUNC>(bwd_add_relu_func, \
+            hipLaunchCooperativeKernel<BWD_ADD_RELU_FUNC>(bwd_add_relu_func, \
                 grid_dim, \
                 THREADS_PER_CTA, \
                 &params_ptr, \
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            cudaLaunchKernel<BWD_ADD_RELU_FUNC>(bwd_add_relu_func, \
+            hipLaunchKernel<BWD_ADD_RELU_FUNC>(bwd_add_relu_func, \
                 grid_dim, \
                 THREADS_PER_CTA, \
                 &params_ptr, \
