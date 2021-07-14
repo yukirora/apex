@@ -4,7 +4,6 @@
 
 #include "THC/THC.h"
 
-
 #ifdef __HIP_PLATFORM_HCC__
 #include "batch_norm_add_relu_hip.h"
 #else

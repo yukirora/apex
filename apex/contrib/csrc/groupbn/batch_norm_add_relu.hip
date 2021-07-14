@@ -5,7 +5,11 @@
 
 #include "THH/THH.h"
 
+#ifdef __HIP_PLATFORM_HCC__
+#include "batch_norm_add_relu_hip.h"
+#else
 #include "batch_norm_add_relu.h"
+#endif
 
 #include <hip/hip_runtime.h>
 
