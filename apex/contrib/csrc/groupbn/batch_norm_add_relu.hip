@@ -5,7 +5,7 @@
 
 #include "THH/THH.h"
 
-#include "batch_norm_add_relu.h"
+#include "batch_norm_add_relu_hip.h"
 
 #include <hip/hip_runtime.h>
 
