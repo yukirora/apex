@@ -8,7 +8,6 @@ typedef enum
     miopenTensorNCHW = 0 // NCHW is the only format supported by miopen
 } miopenTensorFormat_t;
 
-#define hipFuncAttributePreferredSharedMemoryCarveout 9
 namespace at {
 namespace cuda {
 

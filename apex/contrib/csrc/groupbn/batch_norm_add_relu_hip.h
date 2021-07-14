@@ -284,7 +284,7 @@ class NhwcBatchNormAddRelu {
                         USE_ADD_RELU, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            hipFuncSetAttribute(fwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
+            hipFuncSetAttribute(&fwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
             checkCudaStatus(name_ + " fwd ser coop kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
