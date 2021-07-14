@@ -357,7 +357,7 @@ class NhwcBatchNorm {
                         OUTER_LOOPS, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            hipFuncSetAttribute(bwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
+            hipFuncSetAttribute(&bwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
             checkCudaStatus(name_ + " bwd coop serial kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
@@ -403,7 +403,7 @@ class NhwcBatchNorm {
                         OUTER_LOOPS, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            hipFuncSetAttribute(bwd_relu_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
+            hipFuncSetAttribute(&bwd_relu_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
             checkCudaStatus(name_ + " bwd-relu coop serial kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \

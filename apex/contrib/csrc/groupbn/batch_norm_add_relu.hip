@@ -90,8 +90,8 @@ at::Tensor nhwc_bn_addrelu_fwd_train(
   // Create wrapper
   NhwcBatchNormAddRelu *bn = new NhwcBatchNormAddRelu();
 
-  bn->setInputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W, bn_group);
-  bn->setOutputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W);
+  bn->setInputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W, bn_group);
+  bn->setOutputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W);
 
   bn->setConstants(momentum, epsilon);
 
@@ -172,8 +172,8 @@ at::Tensor nhwc_bn_addrelu_fwd_eval(
   // Create wrapper
   NhwcBatchNormAddRelu *bn = new NhwcBatchNormAddRelu();
 
-  bn->setInputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W, bn_group);
-  bn->setOutputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W);
+  bn->setInputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W, bn_group);
+  bn->setOutputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W);
 
   bn->setConstants(momentum, epsilon);
 
@@ -275,8 +275,8 @@ std::vector<at::Tensor> nhwc_bn_addrelu_bwd(
   // Create wrapper
   NhwcBatchNormAddRelu *bn = new NhwcBatchNormAddRelu();
 
-  bn->setInputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W, bn_group);
-  bn->setOutputDescriptor(CUDNN_TENSOR_NHWC, CUDNN_DATA_HALF, N, C, H, W);
+  bn->setInputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W, bn_group);
+  bn->setOutputDescriptor(miopenTensorNHWC, miopenHalf, N, C, H, W);
 
   bn->setConstants(momentum, epsilon);
 
