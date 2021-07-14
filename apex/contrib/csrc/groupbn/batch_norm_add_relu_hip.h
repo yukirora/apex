@@ -131,9 +131,9 @@ class NhwcBatchNormAddRelu {
                           const std::string& string = std::string(),
                           bool verbose = VERBOSE_DEFAULT) {
     if (status != miopenStatusSuccess)
-      LOG(FATAL) << string << " " << cudnnGetErrorString(status);
+      LOG(FATAL) << string << " " << miopenGetErrorString(status);
     else if (verbose)
-      LOG(INFO) << string << " " << cudnnGetErrorString(status);
+      LOG(INFO) << string << " " << miopenGetErrorString(status);
   }
 
   void checkCudaStatus(const std::string& string = std::string(),
@@ -202,13 +202,13 @@ class NhwcBatchNormAddRelu {
 
   void createTensorDescriptor(miopenTensorDescriptor_t *descriptor) {
     miopenStatus_t status = miopenStatusSuccess;
-    status = cudnnCreateTensorDescriptor(descriptor);
+    status = miopenCreateTensorDescriptor(descriptor);
     processCudnnStatus(status, "create tensor_descriptor");
   }
 
   void destroyTensorDescriptor(miopenTensorDescriptor_t descriptor) {
     miopenStatus_t status = miopenStatusSuccess;
-    status = cudnnDestroyTensorDescriptor(descriptor);
+    status = miopenDestroyTensorDescriptor(descriptor);
     processCudnnStatus(status, "destroy tensor_descriptor");
   }
 
