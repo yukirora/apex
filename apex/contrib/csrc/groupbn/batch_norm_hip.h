@@ -69,7 +69,7 @@ class NhwcBatchNorm {
   dim3 calc_bwd_grid(int *loop, const int grid_dim_x);
 
   void setInputDescriptor(const cudnnTensorFormat_t format,
-                                  const cudnnDataType_t     data_type,
+                                  const miopenDataType_t     data_type,
                                   int n, int c, int h, int w, int bn_group) {
     m_ = n * h * w;
     int m_bn_adjusted = m_ * bn_group;
@@ -84,7 +84,7 @@ class NhwcBatchNorm {
   }
 
   void setOutputDescriptor(const cudnnTensorFormat_t format,
-                                   const cudnnDataType_t     data_type,
+                                   const miopenDataType_t     data_type,
                                    int n, int c, int h, int w) {
     setTensorDescriptor(Y_tensor_desc_, format, data_type, n, c, h, w);
   }
@@ -125,13 +125,13 @@ class NhwcBatchNorm {
     eps_ = eps;
   }
 
-  void processCudnnStatus(const cudnnStatus_t& status,
+  void processCudnnStatus(const miopenStatus_t & status,
                           const std::string& string = std::string(),
                           bool verbose = VERBOSE_DEFAULT) {
-    if (status != CUDNN_STATUS_SUCCESS)
-      LOG(FATAL) << string << " " << cudnnGetErrorString(status);
+    if (status != miopenStatusSuccess)
+      LOG(FATAL) << string << " " << miopenGetErrorString(status);
     else if (verbose)
-      LOG(INFO) << string << " " << cudnnGetErrorString(status);
+      LOG(INFO) << string << " " << miopenGetErrorString(status);
   }
 
   void checkCudaStatus(const std::string& string = std::string(),
@@ -154,8 +154,8 @@ class NhwcBatchNorm {
     return retired_cta_bytes;
   }
 
-  cudnnTensorDescriptor_t  X_tensor_desc_ = nullptr;
-  cudnnTensorDescriptor_t  Y_tensor_desc_ = nullptr;
+  miopenTensorDescriptor_t  X_tensor_desc_ = nullptr;
+  miopenTensorDescriptor_t  Y_tensor_desc_ = nullptr;
 
   void*  X_ = nullptr;
   void* dX_ = nullptr;
@@ -187,24 +187,24 @@ class NhwcBatchNorm {
   std::string name_;
 
  private:
-  void setTensorDescriptor(cudnnTensorDescriptor_t descriptor,
+  void setTensorDescriptor(miopenTensorDescriptor_t descriptor,
                            cudnnTensorFormat_t format,
-                           cudnnDataType_t     data_type,
+                           miopenDataType_t     data_type,
                            int n, int c, int h, int w) {
-    cudnnStatus_t status = CUDNN_STATUS_SUCCESS;
+    miopenStatus_t  status = miopenStatusSuccess;
     status = cudnnSetTensor4dDescriptor(descriptor, format, data_type, n, c, h, w);
     processCudnnStatus(status, "set tensor descriptor");
   }
 
-  void createTensorDescriptor(cudnnTensorDescriptor_t *descriptor) {
-    cudnnStatus_t status = CUDNN_STATUS_SUCCESS;
-    status = cudnnCreateTensorDescriptor(descriptor);
+  void createTensorDescriptor(miopenTensorDescriptor_t *descriptor) {
+    miopenStatus_t  status = miopenStatusSuccess;
+    status = miopenCreateTensorDescriptor(descriptor);
     processCudnnStatus(status, "create tensor_descriptor");
   }
 
-  void destroyTensorDescriptor(cudnnTensorDescriptor_t descriptor) {
-    cudnnStatus_t status = CUDNN_STATUS_SUCCESS;
-    status = cudnnDestroyTensorDescriptor(descriptor);
+  void destroyTensorDescriptor(miopenTensorDescriptor_t descriptor) {
+    miopenStatus_t  status = miopenStatusSuccess;
+    status = miopenDestroyTensorDescriptor(descriptor);
     processCudnnStatus(status, "destroy tensor_descriptor");
   }
 
