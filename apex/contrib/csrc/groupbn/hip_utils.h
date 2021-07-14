@@ -5,7 +5,7 @@
 
 typedef enum
 {
-    miopenTensorNCHW = 0 // NCHW is the only format supported by miopen
+    miopenTensorNCHW = 0, // NCHW is the only format supported by miopen
     miopenTensorNHWC = 1 
 } miopenTensorFormat_t;
 
