@@ -352,7 +352,7 @@ class NhwcBatchNormAddRelu {
                         OUTER_LOOPS, \
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
-            hipFuncSetAttribute(bwd_add_relu_func, \
+            hipFuncSetAttribute(&bwd_add_relu_func, \
                              hipFuncAttributePreferredSharedMemoryCarveout, 100); \
             checkCudaStatus(name_ + \
                 " bwd-add-relu coop serial kernel (hipFuncSetAttribute carveout)"); \
