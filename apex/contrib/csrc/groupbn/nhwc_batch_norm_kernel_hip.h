@@ -1093,8 +1093,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // Run the parallel sum accross the CTA to get the local sum.
         printf("%d: \n", THREADS_PER_PIXEL);
         printf("%d: \n", ELEMENTS_PER_LDG);
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, m1, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, m1, thread_in_cta_nhw);
         __syncthreads();
 
         // The values in shared memory correspond to the CTA-wide sums.
@@ -1110,8 +1110,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // Run the parallel sum accross the CTA to get the local adjusted variance.
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, m2, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, m2, thread_in_cta_nhw);
 
         // The workspace in global memory is distributed across the different CTA.
         int gmem_sums_offset = c_blk_index*gridDim.x*C_ELEMENTS_PER_CTA*2;
@@ -1158,11 +1158,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         if (params.sync_iters>0)
         {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, m1, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+3, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, m1, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+3, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, m1, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, m1, thread_in_cta_nhw);
         }
         __syncthreads();
 
@@ -1215,11 +1215,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         if (params.sync_iters>0)
         {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, m2, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+2, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, m2, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+2, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, m2, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, m2, thread_in_cta_nhw);
         }
         __syncthreads();
 
@@ -1695,16 +1695,16 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dscale, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dscale, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dbias, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dbias, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dbias, smem, thread_in_cta_c);
@@ -1745,11 +1745,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dscale parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw);
         }
 
         __syncthreads();
@@ -1759,11 +1759,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dbias parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw);
         }
 
         __syncthreads();
@@ -2085,16 +2085,16 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dscale, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dscale, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dbias, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dbias, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dbias, smem, thread_in_cta_c);
@@ -2135,11 +2135,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dscale parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw);
         }
 
         __syncthreads();
@@ -2149,11 +2149,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dbias parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw);
         }
 
         __syncthreads();
@@ -2503,16 +2503,16 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dscale, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dscale, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-            smem, dbias, thread_in_cta_nhw);
+        // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+        //     smem, dbias, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dbias, smem, thread_in_cta_c);
@@ -2553,11 +2553,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dscale parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dscale, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dscale, thread_in_cta_nhw);
         }
 
         __syncthreads();
@@ -2567,11 +2567,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
         // dbias parallel sum
         if (params.sync_iters>0) {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-                smem, dbias, thread_in_cta_nhw);
+            // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            //     smem, dbias, thread_in_cta_nhw);
         }
 
         __syncthreads();
