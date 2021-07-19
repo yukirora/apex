@@ -304,7 +304,8 @@ class NhwcBatchNorm {
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(&fwd_func, \
+            hipFunction_t hip_fwd_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_fwd"); \
+            hipModuleLaunchKernel(hip_fwd_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \
@@ -384,7 +385,8 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(&bwd_func, \
+            hipFunction_t hip_bwd_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_bwd"); \
+            hipModuleLaunchKernel(hip_bwd_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \
@@ -435,7 +437,8 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(&bwd_relu_func, \
+            hipFunction_t hip_bwd_relu_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_bwd_relu"); \
+            hipModuleLaunchKernel(hip_bwd_relu_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \

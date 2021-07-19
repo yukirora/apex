@@ -1,7 +1,7 @@
-#define __HIP_PLATFORM_HCC__
+#ifndef HIP_UTILS_H
+#define HIP_UTILS_H
+
 #include "hip/hip_runtime.h"
-#ifndef CUDA_UTILS_H
-#define CUDA_UTILS_H
 
 typedef enum
 {
@@ -9,19 +9,30 @@ typedef enum
     miopenTensorNHWC = 1 
 } miopenTensorFormat_t;
 
-namespace at {
-namespace cuda {
-
-namespace utils {
-
-static inline int MaxSharedMemoryPerMultiprocessor(int device_id) {
-    return getDeviceProperties(device_id)->maxSharedMemoryPerMultiProcessor;
+// get hipfunctions
+hipFunction_t get_hipfunction(std::string module_path, std::string kernel_name)
+{
+    hipModule_t module;
+    hipModuleLoad(&module, module_path.c_str());
+    hipFunction_t hip_func;
+    hipModuleGetFunction(&hip_func, module, kernel_name.c_str());
+    return hip_func;
 }
 
+namespace at
+{
+    namespace cuda
+    {
 
-}
-}
-}
+        namespace utils
+        {
 
+            static inline int MaxSharedMemoryPerMultiprocessor(int device_id)
+            {
+                return getDeviceProperties(device_id)->maxSharedMemoryPerMultiProcessor;
+            }
+        }
+    }
+}
 
 #endif
