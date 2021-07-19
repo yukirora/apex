@@ -10,7 +10,7 @@ typedef enum
 } miopenTensorFormat_t;
 
 // get hipfunctions
-hipFunction_t get_hipfunction(std::string module_path, std::string kernel_name)
+static hipFunction_t get_hipfunction(std::string module_path, std::string kernel_name)
 {
     hipModule_t module;
     hipModuleLoad(&module, module_path.c_str());
