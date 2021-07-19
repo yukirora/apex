@@ -125,22 +125,32 @@ class NhwcBatchNorm {
     eps_ = eps;
   }
 
-  void processCudnnStatus(const miopenStatus_t & status,
-                          const std::string& string = std::string(),
-                          bool verbose = VERBOSE_DEFAULT) {
+  void processCudnnStatus(const miopenStatus_t &status,
+                          const std::string &string = std::string(),
+                          bool verbose = VERBOSE_DEFAULT)
+  {
     if (status != miopenStatusSuccess)
+    {
       LOG(FATAL) << string << " " << miopenGetErrorString(status);
+    }
     else if (verbose)
+    {
       LOG(INFO) << string << " " << miopenGetErrorString(status);
+    }
   }
 
-  void checkCudaStatus(const std::string& string = std::string(),
-                       bool verbose = VERBOSE_DEFAULT) {
+  void checkCudaStatus(const std::string &string = std::string(),
+                       bool verbose = VERBOSE_DEFAULT)
+  {
     hipError_t status = hipGetLastError();
     if (status != hipSuccess)
+    {
       LOG(FATAL) << string << " " << hipGetErrorString(status);
+    }
     else if (verbose)
+    {
       LOG(INFO) << string << " " << hipGetErrorString(status);
+    }
   }
 
   size_t size_retired_ctas(int grid_y) const {
