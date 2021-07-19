@@ -308,12 +308,17 @@ class NhwcBatchNormAddRelu {
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
-            hipLaunchKernel<FWD_FUNC>(fwd_func, \
-                grid_dim, \
-                THREADS_PER_CTA, \
-                &params_ptr, \
-                SMEM_SIZE_FWD, \
-                stream); \
+            hipModuleLaunchKernel(&fwd_func, \
+              grid_dim.x, \
+              grid_dim.y, \
+              grid_dim.z, \
+              THREADS_PER_CTA, \
+              1, \
+              1, \
+              SMEM_SIZE_FWD, \
+              stream, \
+              &params_ptr, \
+              nullptr); \
         } \
         checkCudaStatus(name_ + " fwd ser coop kernel"); \
     } while (0)
@@ -376,12 +381,17 @@ class NhwcBatchNormAddRelu {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipLaunchKernel<BWD_ADD_RELU_FUNC>(bwd_add_relu_func, \
-                grid_dim, \
-                THREADS_PER_CTA, \
-                &params_ptr, \
-                SMEM_SIZE_BWD, \
-                stream); \
+            hipModuleLaunchKernel(&bwd_relu_func, \
+              grid_dim.x, \
+              grid_dim.y, \
+              grid_dim.z, \
+              THREADS_PER_CTA, \
+              1, \
+              1, \
+              SMEM_SIZE_BWD, \
+              stream, \
+              &params_ptr, \
+              nullptr); \
         } \
         checkCudaStatus(name_ + " bwd-add-relu coop serial kernel"); \
   } while (0)

@@ -267,7 +267,7 @@ class NhwcBatchNorm {
 #define LAUNCH_FWD_KERNEL(OUTER_LOOPS, USE_RELU, USE_ADD_RELU, COMPILED_FOR_OCCUPANCY, COOP) \
     do { \
         CHECK(SMEM_SIZE_FWD <= MAX_SMEM_WITHOUT_OPT_IN) << "Nhwc batchnorm kernel smem too big."; \
-        hipFunction_t fwd_func = nhwc_batch_norm_fwd< \
+        auto fwd_func = nhwc_batch_norm_fwd< \
                         StorageType, \
                         THREADS_PER_CTA, \
                         THREADS_PER_PIXEL, \
@@ -304,7 +304,7 @@ class NhwcBatchNorm {
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(fwd_func, \
+            hipModuleLaunchKernel(&fwd_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \
@@ -351,7 +351,7 @@ class NhwcBatchNorm {
 #define LAUNCH_BWD_KERNEL(OUTER_LOOPS, COMPILED_FOR_OCCUPANCY, COOP) \
     do { \
         CHECK(SMEM_SIZE_BWD <= MAX_SMEM_WITHOUT_OPT_IN) << "Nhwc batchnorm kernel smem too big."; \
-        hipFunction_t bwd_func = nhwc_batch_norm_bwd< \
+        auto bwd_func = nhwc_batch_norm_bwd< \
                         StorageType, \
                         THREADS_PER_CTA, \
                         THREADS_PER_PIXEL, \
@@ -384,7 +384,7 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(bwd_func, \
+            hipModuleLaunchKernel(&bwd_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \
@@ -402,7 +402,7 @@ class NhwcBatchNorm {
 #define LAUNCH_BWD_RELU_KERNEL(OUTER_LOOPS, COMPILED_FOR_OCCUPANCY, COOP) \
     do { \
         CHECK(SMEM_SIZE_BWD <= MAX_SMEM_WITHOUT_OPT_IN) << "Nhwc batchnorm kernel smem too big."; \
-        hipFunction_t bwd_relu_func = nhwc_batch_norm_bwd_relu< \
+        auto bwd_relu_func = nhwc_batch_norm_bwd_relu< \
                         StorageType, \
                         THREADS_PER_CTA, \
                         THREADS_PER_PIXEL, \
@@ -435,7 +435,7 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipModuleLaunchKernel(bwd_relu_func, \
+            hipModuleLaunchKernel(&bwd_relu_func, \
               grid_dim.x, \
               grid_dim.y, \
               grid_dim.z, \
