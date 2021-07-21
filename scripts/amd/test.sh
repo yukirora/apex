@@ -1,3 +1,1 @@
-# pytest
-cd tests/L0/ && bash run_rocm.sh
-cd tests/distributed/ && bash run_rocm_distributed.sh
+python scripts/amd/apex_gbn_add_relu_test.py
