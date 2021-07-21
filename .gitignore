@@ -1,9 +1,11 @@
 apex.egg-info
 dist
 build
+core
 docs/build
 *~
 __pycache__
+*.npy
 # *.hip
 # *_hip.cuh
 # *_hip.h
