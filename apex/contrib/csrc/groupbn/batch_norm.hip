@@ -73,7 +73,7 @@ at::Tensor nhwc_bn_fwd_train(
                        const int grid_dim_x,
                        const bool coop) {
   
-  printf("%s", "nhwc_bn_fwd_train");
+  printf("%s\n", "nhwc_bn_fwd_train");
 
   const int N = x.size(0);
   const int H = x.size(1);

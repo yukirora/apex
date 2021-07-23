@@ -240,6 +240,12 @@ if "--bnp" in sys.argv:
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--bnp was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
     else:
+        if not IS_ROCM_PYTORCH:
+            check_cuda_torch_binary_vs_bare_metal(torch.utils.cpp_extension.CUDA_HOME)
+
+        nvcc_args_bnp = ['-DCUDA_HAS_FP16=1', '-D__CUDA_NO_HALF_OPERATORS__',
+                         '-D__CUDA_NO_HALF_CONVERSIONS__', '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros
+        hipcc_args_bnp = [] + version_dependent_macros
         ext_modules.append(
             CUDAExtension(name='bnp',
                           sources=['apex/contrib/csrc/groupbn/batch_norm.cu',
@@ -248,10 +254,7 @@ if "--bnp" in sys.argv:
                                    'apex/contrib/csrc/groupbn/batch_norm_add_relu.cu'],
                           include_dirs=[os.path.join(this_dir, 'csrc')],
                           extra_compile_args={'cxx': [] + version_dependent_macros,
-                                              'nvcc':['-DCUDA_HAS_FP16=1',
-                                                      '-D__CUDA_NO_HALF_OPERATORS__',
-                                                      '-D__CUDA_NO_HALF_CONVERSIONS__',
-                                                      '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros}))
+                                              'nvcc': nvcc_args_bnp if not IS_ROCM_PYTORCH else hipcc_args_bnp}))
 
 if "--xentropy" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension

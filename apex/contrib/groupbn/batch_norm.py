@@ -10,7 +10,6 @@ class bn_NHWC_impl(torch.autograd.Function):
         print("bn_NHWC_impl.forward")
         if is_train:
             ctx.save_for_backward(x, s, b, rm, riv, mini_m, mini_riv)
-            print("1")
             ctx.epsilon = epsilon
             ctx.momentum = mom
             ctx.ret_cta = ret_cta
@@ -24,11 +23,9 @@ class bn_NHWC_impl(torch.autograd.Function):
             ctx.bwd_occup = bwd_occup
             ctx.bwd_grid_x = bwd_grid_x
             ctx.multi_stream = multi_stream
-            print("2")
             res =  bnp.bn_fwd_nhwc(x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, fwd_occup, fwd_grid_x, multi_stream)
             return res
         else:
-            print("3")
             return bnp.bn_fwd_eval_nhwc(x, s, b, rm, riv, ret_cta, bn_group, mom, epsilon, fuse_relu)
 
     @staticmethod
