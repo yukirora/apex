@@ -71,6 +71,8 @@ at::Tensor nhwc_bn_fwd_train(
                        const int occupancy,
                        const int grid_dim_x,
                        const bool coop) {
+  
+  printf("%s", "nhwc_bn_fwd_train");
 
   const int N = x.size(0);
   const int H = x.size(1);
@@ -153,6 +155,8 @@ at::Tensor nhwc_bn_fwd_eval(
                        const float momentum,
                        const float epsilon,
                        const bool fuse_relu) {
+
+  printf("%s", "nhwc_bn_fwd_eval");
 
   const int N = x.size(0);
   const int H = x.size(1);

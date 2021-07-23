@@ -1,1 +1,2 @@
-git clean -fd
+# git clean -fd
+pip uninstall apex -y

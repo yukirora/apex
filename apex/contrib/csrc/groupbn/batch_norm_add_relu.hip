@@ -74,6 +74,8 @@ at::Tensor nhwc_bn_addrelu_fwd_train(
                        const int occupancy,
                        const int grid_dim_x,
                        const bool coop) {
+  
+  printf("%s", "nhwc_bn_addrelu_fwd_train");
 
   const int N = x.size(0);
   const int H = x.size(1);

@@ -131,7 +131,9 @@ if __name__ == '__main__':
         gbn_input = torch.from_numpy(np.load('input.npy')).cuda().half()
         gbn_input.requires_grad = True
         gbn_input_data = to_channels_last(gbn_input)
+        print("group_batchnorm: before")
         gbn_output = group_batchnorm(gbn_input_data, gbn_residual_data)
+        print("group_batchnorm: after")
 
         # Bacward
         gbn_grad = to_channels_last(bn_grad)

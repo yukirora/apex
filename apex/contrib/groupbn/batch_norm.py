@@ -7,8 +7,10 @@ import bnp
 class bn_NHWC_impl(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream):
+        print("bn_NHWC_impl.forward")
         if is_train:
             ctx.save_for_backward(x, s, b, rm, riv, mini_m, mini_riv)
+            print("1")
             ctx.epsilon = epsilon
             ctx.momentum = mom
             ctx.ret_cta = ret_cta
@@ -22,10 +24,11 @@ class bn_NHWC_impl(torch.autograd.Function):
             ctx.bwd_occup = bwd_occup
             ctx.bwd_grid_x = bwd_grid_x
             ctx.multi_stream = multi_stream
-
+            print("2")
             res =  bnp.bn_fwd_nhwc(x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, fwd_occup, fwd_grid_x, multi_stream)
             return res
         else:
+            print("3")
             return bnp.bn_fwd_eval_nhwc(x, s, b, rm, riv, ret_cta, bn_group, mom, epsilon, fuse_relu)
 
     @staticmethod
@@ -53,6 +56,7 @@ class bn_NHWC_impl(torch.autograd.Function):
 class bn_addrelu_NHWC_impl(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, z, s, b, rm, riv, mini_m, mini_riv, grid_dim_y, ret_cta, mom, epsilon, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream):
+        print("bn_addrelu_NHWC_impl.forward")
         if is_train:
             bitmask = torch.cuda.IntTensor(((x.numel()+31)//32) * 2 * grid_dim_y)
             ctx.save_for_backward(x, s, b, rm, riv, mini_m, mini_riv, bitmask)
@@ -101,6 +105,7 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
 class BatchNorm2d_NHWC(_BatchNorm):
     # if using BatchNorm2d_NHWC simultaneously with multiple streams set multi_stream to True
     def __init__(self, num_features, fuse_relu=False, bn_group=1, max_cta_per_sm=2, cta_launch_margin=12, multi_stream=False):
+        print("BatchNorm2d_NHWC.__init__")
         super(BatchNorm2d_NHWC, self).__init__(num_features)
 
         self.fuse_relu = fuse_relu
@@ -194,6 +199,8 @@ class BatchNorm2d_NHWC(_BatchNorm):
 
 
     def forward(self, x, z=None):
+        # import pdb; pdb.set_trace()
+        print("BatchNorm2d_NHWC.forward")
         if z is not None:
             assert(self.fuse_relu==True)
             return bn_addrelu_NHWC_impl.apply(x, z,
