@@ -245,7 +245,7 @@ if "--bnp" in sys.argv:
 
         nvcc_args_bnp = ['-DCUDA_HAS_FP16=1', '-D__CUDA_NO_HALF_OPERATORS__',
                          '-D__CUDA_NO_HALF_CONVERSIONS__', '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros
-        hipcc_args_bnp = [] + version_dependent_macros
+        hipcc_args_bnp = ['-g'] + version_dependent_macros # -g flag generates debug symbols
         ext_modules.append(
             CUDAExtension(name='bnp',
                           sources=['apex/contrib/csrc/groupbn/batch_norm.cu',

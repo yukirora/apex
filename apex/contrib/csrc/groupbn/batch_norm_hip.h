@@ -274,6 +274,7 @@ class NhwcBatchNorm {
   void _fwdKernelLauncher(hipStream_t stream, NhwcBatchNormFwdParams params,
                                 dim3 grid_dim, int outer_loops, bool use_relu, const int occupancy, const bool coop) {
 
+    printf("%s\n", "_fwdKernelLauncher");
 #define LAUNCH_FWD_KERNEL(OUTER_LOOPS, USE_RELU, USE_ADD_RELU, COMPILED_FOR_OCCUPANCY, COOP) \
     do { \
         CHECK(SMEM_SIZE_FWD <= MAX_SMEM_WITHOUT_OPT_IN) << "Nhwc batchnorm kernel smem too big."; \
@@ -691,6 +692,7 @@ dim3 NhwcBatchNorm::calc_bwd_grid(int *loop, const int grid_dim_x) {
 
 void NhwcBatchNorm::fwd(hipStream_t stream, bool use_relu, void* my_data, void* pair_data, void* pair_data2, void* pair_data3,
                         const int bn_group, const int magic, const int occupancy, const int grid_dim_x, const bool coop) {
+  printf("%s\n", "NhwcBatchNorm::fwd");   
   bool ptrs_are_set =
       X_tensor_desc_ != nullptr
       && Y_tensor_desc_ != nullptr
