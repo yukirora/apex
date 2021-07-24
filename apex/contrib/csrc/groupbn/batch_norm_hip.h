@@ -42,8 +42,6 @@
 #include "hip_utils.h"
 
 
-#define VERBOSE_DEFAULT false
-
 class NhwcBatchNorm {
  public:
   NhwcBatchNorm() {
@@ -125,33 +123,6 @@ class NhwcBatchNorm {
     eps_ = eps;
   }
 
-  void processCudnnStatus(const miopenStatus_t &status,
-                          const std::string &string = std::string(),
-                          bool verbose = VERBOSE_DEFAULT)
-  {
-    if (status != miopenStatusSuccess)
-    {
-      LOG(FATAL) << string << " " << miopenGetErrorString(status);
-    }
-    else if (verbose)
-    {
-      LOG(INFO) << string << " " << miopenGetErrorString(status);
-    }
-  }
-
-  void checkCudaStatus(const std::string &string = std::string(),
-                       bool verbose = VERBOSE_DEFAULT)
-  {
-    hipError_t status = hipGetLastError();
-    if (status != hipSuccess)
-    {
-      LOG(FATAL) << string << " " << hipGetErrorString(status);
-    }
-    else if (verbose)
-    {
-      LOG(INFO) << string << " " << hipGetErrorString(status);
-    }
-  }
 
   size_t size_retired_ctas(int grid_y) const {
     // Note that the value of max_grid_y to handle known GPUs is about 160.
@@ -203,19 +174,19 @@ class NhwcBatchNorm {
                            int n, int c, int h, int w) {
     miopenStatus_t  status = miopenStatusSuccess;
     status = miopenSet4dTensorDescriptor(descriptor, data_type, n, c, h, w);
-    processCudnnStatus(status, "set tensor descriptor");
+    processMiopenStatus(status, "set tensor descriptor");
   }
 
   void createTensorDescriptor(miopenTensorDescriptor_t *descriptor) {
     miopenStatus_t  status = miopenStatusSuccess;
     status = miopenCreateTensorDescriptor(descriptor);
-    processCudnnStatus(status, "create tensor_descriptor");
+    processMiopenStatus(status, "create tensor_descriptor");
   }
 
   void destroyTensorDescriptor(miopenTensorDescriptor_t descriptor) {
     miopenStatus_t  status = miopenStatusSuccess;
     status = miopenDestroyTensorDescriptor(descriptor);
-    processCudnnStatus(status, "destroy tensor_descriptor");
+    processMiopenStatus(status, "destroy tensor_descriptor");
   }
 
  protected:
@@ -292,7 +263,7 @@ class NhwcBatchNorm {
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
             hipFuncSetAttribute(&fwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
-            checkCudaStatus(name_ + " fwd ser coop kernel (hipFuncSetAttribute carveout)"); \
+            checkHipStatus(name_ + " fwd ser coop kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
         using FWD_FUNC = decltype(nhwc_batch_norm_fwd< \
@@ -315,7 +286,9 @@ class NhwcBatchNorm {
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
+            std::cout << "else" << std::endl; \
             hipFunction_t hip_fwd_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_fwd"); \
+            std::cout << "else 2" << std::endl; \
             hipModuleLaunchKernel(hip_fwd_func, \
               grid_dim.x, \
               grid_dim.y, \
@@ -328,7 +301,7 @@ class NhwcBatchNorm {
               &params_ptr, \
               nullptr); \
         } \
-        checkCudaStatus(name_ + " fwd ser coop kernel"); \
+        checkHipStatus(name_ + " fwd ser coop kernel"); \
     } while (0)
 
     // Don't try for an occupancy > 2 as this will squeeze register use and create spills.
@@ -375,7 +348,7 @@ class NhwcBatchNorm {
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
             hipFuncSetAttribute(&bwd_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
-            checkCudaStatus(name_ + " bwd coop serial kernel (hipFuncSetAttribute carveout)"); \
+            checkHipStatus(name_ + " bwd coop serial kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
         using BWD_FUNC = decltype(nhwc_batch_norm_bwd< \
@@ -409,7 +382,7 @@ class NhwcBatchNorm {
               &params_ptr, \
               nullptr); \
         } \
-        checkCudaStatus(name_ + " bwd coop serial kernel"); \
+        checkHipStatus(name_ + " bwd coop serial kernel"); \
     } while (0)
 
 #define LAUNCH_BWD_RELU_KERNEL(OUTER_LOOPS, COMPILED_FOR_OCCUPANCY, COOP) \
@@ -427,7 +400,7 @@ class NhwcBatchNorm {
                         COMPILED_FOR_OCCUPANCY>; \
         if (COMPILED_FOR_OCCUPANCY > 1) { \
             hipFuncSetAttribute(&bwd_relu_func, hipFuncAttributePreferredSharedMemoryCarveout, 100); \
-            checkCudaStatus(name_ + " bwd-relu coop serial kernel (hipFuncSetAttribute carveout)"); \
+            checkHipStatus(name_ + " bwd-relu coop serial kernel (hipFuncSetAttribute carveout)"); \
         } \
         void *params_ptr = static_cast<void*>(&params); \
         using BWD_RELU_FUNC = decltype(nhwc_batch_norm_bwd_relu< \
@@ -461,7 +434,7 @@ class NhwcBatchNorm {
               &params_ptr, \
               nullptr); \
         } \
-        checkCudaStatus(name_ + " bwd-relu coop serial kernel"); \
+        checkHipStatus(name_ + " bwd-relu coop serial kernel"); \
     } while (0)
 
     // Don't try for an occupancy > 2 as this will squeeze register use and create spills.
@@ -635,12 +608,12 @@ void NhwcBatchNorm::fwdInference(hipStream_t stream, bool use_relu) {
    hipLaunchKernelGGL(( nhwc_batch_norm_fwd_inference
       <StorageType, THREADS_PER_CTA, THREADS_PER_PIXEL, ELEMENTS_PER_LDG, true, false>)
     , dim3(grid_dim), dim3(THREADS_PER_CTA), 0, stream, params);
-    checkCudaStatus(name_ + " fwd_inference-relu kernel");
+    checkHipStatus(name_ + " fwd_inference-relu kernel");
   } else {
    hipLaunchKernelGGL(( nhwc_batch_norm_fwd_inference
       <StorageType, THREADS_PER_CTA, THREADS_PER_PIXEL, ELEMENTS_PER_LDG, false, false>)
     , dim3(grid_dim), dim3(THREADS_PER_CTA), 0, stream, params);
-    checkCudaStatus(name_ + " fwd_inference kernel");
+    checkHipStatus(name_ + " fwd_inference kernel");
   }
 }
 

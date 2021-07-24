@@ -1,7 +1,7 @@
 python scripts/amd/apex_gbn_add_relu_test.py
 
 # gdb -ex "set breakpoint pending on" \
-#     -ex 'break NhwcBatchNorm::fwd' \
+#     -ex 'break _fwdKernelLauncher' \
 #     -ex 'run' \
 #     --args python scripts/amd/apex_gbn_add_relu_test.py
 
