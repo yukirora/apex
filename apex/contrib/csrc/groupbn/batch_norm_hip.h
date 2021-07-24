@@ -274,7 +274,7 @@ class NhwcBatchNorm {
   void _fwdKernelLauncher(hipStream_t stream, NhwcBatchNormFwdParams params,
                                 dim3 grid_dim, int outer_loops, bool use_relu, const int occupancy, const bool coop) {
 
-    printf("%s\n", "_fwdKernelLauncher");
+    std::cout << "_fwdKernelLauncher" << std::endl;
 #define LAUNCH_FWD_KERNEL(OUTER_LOOPS, USE_RELU, USE_ADD_RELU, COMPILED_FOR_OCCUPANCY, COOP) \
     do { \
         CHECK(SMEM_SIZE_FWD <= MAX_SMEM_WITHOUT_OPT_IN) << "Nhwc batchnorm kernel smem too big."; \

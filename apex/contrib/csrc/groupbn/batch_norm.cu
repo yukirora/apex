@@ -71,8 +71,10 @@ at::Tensor nhwc_bn_fwd_train(
                        const int occupancy,
                        const int grid_dim_x,
                        const bool coop) {
-  
+
+#ifdef __HIP_PLATFORM_HCC__
   printf("%s\n", "nhwc_bn_fwd_train");
+#endif
 
   const int N = x.size(0);
   const int H = x.size(1);
