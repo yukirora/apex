@@ -41,6 +41,7 @@
 #include "nhwc_batch_norm_kernel_hip.h"
 #include "hip_utils.h"
 
+#define KERNEL_FILE "/dockerx/apex_rocm/apex/contrib/csrc/groupbn/nhwc_batch_norm_kernel_hip.h"
 
 class NhwcBatchNorm {
  public:
@@ -287,7 +288,7 @@ class NhwcBatchNorm {
                 stream); \
         } else { \
             std::cout << "else" << std::endl; \
-            hipFunction_t hip_fwd_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_fwd"); \
+            hipFunction_t hip_fwd_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_fwd"); \
             std::cout << "else 2" << std::endl; \
             hipModuleLaunchKernel(hip_fwd_func, \
               grid_dim.x, \
@@ -369,7 +370,7 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipFunction_t hip_bwd_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_bwd"); \
+            hipFunction_t hip_bwd_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_bwd"); \
             hipModuleLaunchKernel(hip_bwd_func, \
               grid_dim.x, \
               grid_dim.y, \
@@ -421,7 +422,7 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipFunction_t hip_bwd_relu_func = get_hipfunction("nhwc_batch_norm_kernel_hip.h", "nhwc_batch_norm_bwd_relu"); \
+            hipFunction_t hip_bwd_relu_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_bwd_relu"); \
             hipModuleLaunchKernel(hip_bwd_relu_func, \
               grid_dim.x, \
               grid_dim.y, \
