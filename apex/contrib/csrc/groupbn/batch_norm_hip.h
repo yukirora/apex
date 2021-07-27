@@ -41,6 +41,7 @@
 #include "nhwc_batch_norm_kernel_hip.h"
 #include "hip_utils.h"
 
+// #define KERNEL_FILE "/dockerx/apex_rocm/apex/contrib/csrc/groupbn/nhwc_batch_norm.hip"
 #define KERNEL_FILE "/dockerx/apex_rocm/apex/contrib/csrc/groupbn/nhwc_batch_norm_kernel_hip.h"
 
 class NhwcBatchNorm {
@@ -287,20 +288,12 @@ class NhwcBatchNorm {
                 SMEM_SIZE_FWD, \
                 stream); \
         } else { \
-            std::cout << "else" << std::endl; \
-            hipFunction_t hip_fwd_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_fwd"); \
-            std::cout << "else 2" << std::endl; \
-            hipModuleLaunchKernel(hip_fwd_func, \
-              grid_dim.x, \
-              grid_dim.y, \
-              grid_dim.z, \
-              THREADS_PER_CTA, \
-              1, \
-              1, \
-              SMEM_SIZE_FWD, \
-              stream, \
-              &params_ptr, \
-              nullptr); \
+            hipLaunchKernelGGL(fwd_func, \
+                grid_dim, \
+                THREADS_PER_CTA, \
+                SMEM_SIZE_FWD, \
+                stream, \
+                params); \
         } \
         checkHipStatus(name_ + " fwd ser coop kernel"); \
     } while (0)
@@ -370,18 +363,12 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipFunction_t hip_bwd_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_bwd"); \
-            hipModuleLaunchKernel(hip_bwd_func, \
-              grid_dim.x, \
-              grid_dim.y, \
-              grid_dim.z, \
-              THREADS_PER_CTA, \
-              1, \
-              1, \
-              SMEM_SIZE_BWD, \
-              stream, \
-              &params_ptr, \
-              nullptr); \
+            hipLaunchKernelGGL(bwd_func, \
+                grid_dim, \
+                THREADS_PER_CTA, \
+                SMEM_SIZE_FWD, \
+                stream, \
+                params); \
         } \
         checkHipStatus(name_ + " bwd coop serial kernel"); \
     } while (0)
@@ -422,18 +409,12 @@ class NhwcBatchNorm {
                 SMEM_SIZE_BWD, \
                 stream); \
         } else { \
-            hipFunction_t hip_bwd_relu_func = get_hipfunction(KERNEL_FILE, "nhwc_batch_norm_bwd_relu"); \
-            hipModuleLaunchKernel(hip_bwd_relu_func, \
-              grid_dim.x, \
-              grid_dim.y, \
-              grid_dim.z, \
-              THREADS_PER_CTA, \
-              1, \
-              1, \
-              SMEM_SIZE_BWD, \
-              stream, \
-              &params_ptr, \
-              nullptr); \
+            hipLaunchKernelGGL(bwd_relu_func, \
+                grid_dim, \
+                THREADS_PER_CTA, \
+                SMEM_SIZE_FWD, \
+                stream, \
+                params); \
         } \
         checkHipStatus(name_ + " bwd-relu coop serial kernel"); \
     } while (0)
