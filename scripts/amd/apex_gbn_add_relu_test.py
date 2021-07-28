@@ -131,14 +131,17 @@ if __name__ == '__main__':
         gbn_input = torch.from_numpy(np.load('input.npy')).cuda().half()
         gbn_input.requires_grad = True
         gbn_input_data = to_channels_last(gbn_input)
-        print("group_batchnorm: before")
+        print("group_batchnorm forward: before")
         gbn_output = group_batchnorm(gbn_input_data, gbn_residual_data)
-        print("group_batchnorm: after")
+        print("group_batchnorm forward: after")
 
         # Bacward
         gbn_grad = to_channels_last(bn_grad)
+        print("group_batchnorm backward: before")
         gbn_output.backward(gbn_grad)
+        print("group_batchnorm backward: after")
         torch.cuda.synchronize()
+        print("torch.cuda.synchronize(): after")
         gbn_output_grad = None
 
         gbn_output = to_channels_first(gbn_output)

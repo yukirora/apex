@@ -853,6 +853,7 @@ template<
 >
 __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     void nhwc_batch_norm_fwd(NhwcBatchNormFwdParams params) {
+    printf("%s \n", "nhwc_batch_norm_fwd: start");
     // The number of pixels loaded in a single LDG.
     const int PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
     // The number of pixels computed per CTA stored in registers.
@@ -1090,7 +1091,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             m1[i] = mean[i] * count;
         }
 
-        // printf("%d, %d, %d: \n", THREADS_PER_PIXEL, ELEMENTS_PER_LDG, THREADS_PER_CTA);
+        printf("%d, %d, %d: \n", THREADS_PER_PIXEL, ELEMENTS_PER_LDG, THREADS_PER_CTA);
         // Run the parallel sum accross the CTA to get the local sum.
         // ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
         //     smem, m1, thread_in_cta_nhw);
@@ -1139,7 +1140,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The counters to count how many CTAs have retired at this point.
         // A given cta uses the same counter every other time through the outer loop.
         int *gmem_retired_ctas = &params.gmem_retired_ctas[c_blk_index % (2 * gridDim.y)];
-        inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
+        // inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
 
         // Reset the mean to compute the global mean.
         #pragma unroll
@@ -1384,6 +1385,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // We're about to start on the next c-blk.  Needed?
         __syncthreads();
     }
+    printf("%s \n", "nhwc_batch_norm_fwd: end");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1529,6 +1531,7 @@ template<
 >
 __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     void nhwc_batch_norm_bwd(NhwcBatchNormBwdParams params) {
+    printf("%s \n", "nhwc_batch_norm_bwd: start");
     // The number of pixels loaded in a single LDG.
     const int PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
     // The number of pixels computed per CTA stored in registers.
@@ -1722,7 +1725,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The counters to count how many CTAs have retired at this point.
         // A given cta uses the same counter every other time through the outer loop.
         int *gmem_retired_ctas = &params.gmem_retired_ctas[c_blk_index % (2 * gridDim.y)];
-        inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
+        // inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
 
         // Reset the accumulators for global summation
         zero_array(dscale);
@@ -1875,6 +1878,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
         // We're about to start on the next c-blk.  Needed?
         __syncthreads();
+        printf("%s \n", "nhwc_batch_norm_bwd: end");
     }
 }
 
@@ -1893,6 +1897,7 @@ template<
 >
 __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     void nhwc_batch_norm_bwd_relu(NhwcBatchNormBwdParams params) {
+    printf("%s \n", "nhwc_batch_norm_bwd_relu: start");
     // The number of pixels loaded in a single LDG.
     const int PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
     // The number of pixels computed per CTA stored in registers.
@@ -2112,7 +2117,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The counters to count how many CTAs have retired at this point.
         // A given cta uses the same counter every other time through the outer loop.
         int *gmem_retired_ctas = &params.gmem_retired_ctas[c_blk_index % (2 * gridDim.y)];
-        inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
+        // inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
 
         // Reset the accumulators for global summation
         zero_array(dscale);
@@ -2263,6 +2268,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
         // We're about to start on the next c-blk.  Needed?
         __syncthreads();
+         printf("%s \n", "nhwc_batch_norm_bwd_relu: end");
     }
 }
 
@@ -2281,6 +2287,7 @@ template<
 >
 __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     void nhwc_batch_norm_bwd_add_relu(NhwcBatchNormBwdParams params) {
+    printf("%s \n", "nhwc_batch_norm_bwd_add_relu: start");
     // The number of pixels loaded in a single LDG.
     const int PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
     // The number of pixels computed per CTA stored in registers.
@@ -2530,7 +2537,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The counters to count how many CTAs have retired at this point.
         // A given cta uses the same counter every other time through the outer loop.
         int *gmem_retired_ctas = &params.gmem_retired_ctas[c_blk_index % (2 * gridDim.y)];
-        inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
+        // inter_block_sync(gmem_retired_ctas, gridDim.x, blockIdx.x == 0);
 
         // Reset the accumulators for global summation
         zero_array(dscale);
@@ -2683,6 +2690,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // We're about to start on the next c-blk.  Needed?
         __syncthreads();
     }
+    printf("%s \n", "nhwc_batch_norm_bwd_add_relu: end");
 }
 
 #endif  // MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_KERNEL_H_
