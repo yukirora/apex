@@ -41,8 +41,6 @@
 #include "nhwc_batch_norm_kernel_hip.h"
 #include "hip_utils.h"
 
-// #define KERNEL_FILE "/dockerx/apex_rocm/apex/contrib/csrc/groupbn/nhwc_batch_norm.hip"
-#define KERNEL_FILE "/dockerx/apex_rocm/apex/contrib/csrc/groupbn/nhwc_batch_norm_kernel_hip.h"
 
 class NhwcBatchNorm {
  public:
