@@ -35,6 +35,13 @@
 #include "nhwc_batch_norm_kernel.h"
 #include "cuda_utils.h"
 
+#ifdef __HIP_PLATFORM_HCC__
+using bitmask_t = uint64_t;
+using bitmask_pyt_t = int64_t;
+#else
+using bitmask_t = unsigned int;
+using bitmask_pyt_t = int32_t;
+#endif
 
 #define VERBOSE_DEFAULT false
 
@@ -229,7 +236,7 @@ class NhwcBatchNormAddRelu {
   float *partial_sums_ = nullptr;
   int *partial_counts_ = nullptr;
   int *retired_ctas_   = nullptr;
-  unsigned int *relu_bitmask_ = nullptr;
+  bitmask_t *relu_bitmask_ = nullptr;
 
   void _setFwdParams(NhwcBatchNormFwdParams *params) const;
   void _setFwdInferenceParams(NhwcBatchNormFwdInferenceParams *params) const;
@@ -558,12 +565,12 @@ const std::vector<size_t> NhwcBatchNormAddRelu::numWorkspaceBytes() const {
   const size_t num_variance_bytes = num_mean_bytes;
 
 #ifdef __HIP_PLATFORM_HCC__
-  int elems_per_group = ((m_ + 63) & ~63) * 2;
+  int elems_per_group = ((m_ + 3) & ~3);
 #else
   int elems_per_group = ((m_ + 31) & ~31) * 2;
 #endif
   int group_count = div_up(c_, C_ELEMENTS_PER_CTA);
-  const size_t bitmask_bytes = elems_per_group * group_count * sizeof(unsigned int);
+  const size_t bitmask_bytes = elems_per_group * group_count * sizeof(bitmask_t);
 
   const size_t size_sums          = grid_y*grid_x*THREADS_PER_PIXEL*\
       ELEMENTS_PER_LDG*2*sizeof(float);
@@ -581,7 +588,7 @@ void NhwcBatchNormAddRelu::setWorkspacePointers(
 
   minibatch_mean_     = static_cast<float*>(workspace[0]);
   minibatch_variance_ = static_cast<float*>(workspace[1]);
-  relu_bitmask_       = static_cast<unsigned int*>(workspace[2]);
+  relu_bitmask_       = static_cast<bitmask_t*>(workspace[2]);
   retired_ctas_       = static_cast<int*>(workspace[3]);
   partial_sums_       = static_cast<float*>(workspace[4]);
   partial_counts_     = static_cast<int*>(workspace[5]);

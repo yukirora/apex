@@ -124,7 +124,7 @@ at::Tensor nhwc_bn_addrelu_fwd_train(
   std::vector<void *> workspace;
   workspace.push_back(minibatch_mean.contiguous().DATA_PTR<float>());
   workspace.push_back(minibatch_inv_var.contiguous().DATA_PTR<float>());
-  workspace.push_back(bitmask.contiguous().DATA_PTR<int32_t>());
+  workspace.push_back(bitmask.contiguous().DATA_PTR<bitmask_pyt_t>());
 
   auto stream = at::cuda::getCurrentCUDAStream().stream();
   const int retired_cta_bytes = workspace_bytes[3];
@@ -314,7 +314,7 @@ std::vector<at::Tensor> nhwc_bn_addrelu_bwd(
   std::vector<void *> workspace;
   workspace.push_back(minibatch_mean.contiguous().DATA_PTR<float>());
   workspace.push_back(minibatch_inv_var.contiguous().DATA_PTR<float>());
-  workspace.push_back(bitmask.contiguous().DATA_PTR<int32_t>());
+  workspace.push_back(bitmask.contiguous().DATA_PTR<bitmask_pyt_t>());
 
   auto stream = at::cuda::getCurrentCUDAStream().stream();
   const int retired_cta_bytes = workspace_bytes[3];

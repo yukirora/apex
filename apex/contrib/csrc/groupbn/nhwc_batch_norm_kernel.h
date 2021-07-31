@@ -34,6 +34,16 @@
 #include <stdint.h>
 #include <algorithm>
 
+#ifdef __HIP_PLATFORM_HCC__
+using bitmask_t = uint64_t;
+#define BITMASK_OFFSET 1
+#define ONE_BITMASK 1UL
+#else
+using bitmask_t = unsigned int;
+#define BITMASK_OFFSET 2
+#define ONE_BITMASK 1U
+#endif
+
 #define DEVICE_FUNCTION static inline __device__
 
 // CTA margin used by cooperative launch. Can be overridden by env var NHWC_BATCHNORM_LAUNCH_MARGIN.
@@ -63,7 +73,7 @@ DEVICE_FUNCTION T shfl_sync(T var, int src_lane) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-DEVICE_FUNCTION unsigned long long int ballot(int predicate) {
+DEVICE_FUNCTION bitmask_t ballot(int predicate) {
 #ifdef __HIP_PLATFORM_HCC__
     return __ballot(predicate);
 #else
@@ -900,7 +910,7 @@ struct NhwcBatchNormFwdParams {
     // saved mean/var (refer BN API from cudnn doc)
     float *gmem_saved_mean, *gmem_saved_var;
     // ReLU bitmask
-    unsigned int *gmem_relu_bitmask;
+    bitmask_t *gmem_relu_bitmask;
     // The dimensions.
     int nhw, c;
     // factor to scale sum of squared errors to get saved variance.  Must be 1/nhw.
@@ -1389,9 +1399,9 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The base pointer to write to.
         uint16_t *const gmem_dst = &params.gmem_dst[thread_c];
 
-        unsigned int *const gmem_relu_bitmask = params.gmem_relu_bitmask +
+        bitmask_t *const gmem_relu_bitmask = params.gmem_relu_bitmask +
 #ifdef __HIP_PLATFORM_HCC__
-                                     ((params.nhw + 63) & ~63) * 2 * c_blk_index;
+                                     ((params.nhw + 3) & ~3) * c_blk_index;
 #else
                                      ((params.nhw + 31) & ~31) * 2 * c_blk_index;
 #endif
@@ -1419,7 +1429,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     float x1_math[ELEMENTS_PER_LDG];
                     ldg_stream(x1_math, &gmem_src1[(is_valid ? idx : 0)*params.c]);
                     add(x_math, x1_math);
-                    unsigned int relu_mask;
+                    bitmask_t relu_mask;
 #ifdef __HIP_PLATFORM_HCC__
                     int lane_id = threadIdx.x & 63;
 #else
@@ -1427,8 +1437,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                        bool rectified = x_math[j] < 0.0F;
-                        unsigned int local_relu_mask = ballot(rectified);
+                        bool rectified = x_math[j] <= 0.0F;
+                        bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             // Thread 0 remembers the relu_mask from the first time through this
                             // loop, Thread 1 the next, Thread 2 the next, and Thread 3 the last.
@@ -1439,7 +1449,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                         }
                     }
                     if (is_valid_nhw && (lane_id < ELEMENTS_PER_LDG)) {
-                        gmem_relu_bitmask[idx * 2 + lane_id] = relu_mask;
+                        gmem_relu_bitmask[idx * BITMASK_OFFSET + lane_id] = relu_mask;
                     }
                 } else if (USE_RELU) {
                     relu_activation(x_math);
@@ -1486,7 +1496,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     float x1_math[ELEMENTS_PER_LDG];
                     ldg_stream(x1_math, &gmem_src1[(is_valid ? idx : 0)*params.c]);
                     add(x_math, x1_math);
-                    unsigned int relu_mask;
+                    bitmask_t relu_mask;
 #ifdef __HIP_PLATFORM_HCC__
                     int lane_id = threadIdx.x & 63;
 #else
@@ -1494,8 +1504,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                        bool rectified = x_math[j] < 0.0F;
-                        unsigned int local_relu_mask = ballot(rectified);
+                        bool rectified = x_math[j] <= 0.0F;
+                        bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             relu_mask = local_relu_mask;
                         }
@@ -1504,7 +1514,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                         }
                     }
                     if (is_valid_nhw && (lane_id < ELEMENTS_PER_LDG)) {
-                        gmem_relu_bitmask[idx * 2 + lane_id] = relu_mask;
+                        gmem_relu_bitmask[idx * BITMASK_OFFSET + lane_id] = relu_mask;
                     }
                 } else if (USE_RELU) {
                     relu_activation(x_math);
@@ -1533,7 +1543,7 @@ struct NhwcBatchNormBwdParams {
     // The mean/inv-var saved from fwd pass
     float *gmem_saved_mean, *gmem_saved_var;
     // ReLU bitmask
-    unsigned int *gmem_relu_bitmask;
+    bitmask_t *gmem_relu_bitmask;
     // The dimensions.
     int nhw, c;
     // factor to scale sum of squared errors to get saved variance.  Must be 1/nhw.
@@ -2543,9 +2553,9 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             cta_nhw_smem -= offset;
         }
 
-        const unsigned int *const gmem_relu_bitmask = params.gmem_relu_bitmask +
+        const bitmask_t *const gmem_relu_bitmask = params.gmem_relu_bitmask +
 #ifdef __HIP_PLATFORM_HCC__
-                                      ((params.nhw + 63) & ~63) * 2 * c_blk_index;
+                                      ((params.nhw + 3) & ~3) * c_blk_index;
 #else
                                       ((params.nhw + 31) & ~31) * 2 * c_blk_index;
 #endif
@@ -2565,7 +2575,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 
             // Read the elements from memory.
             float is_valid[PIXELS_PER_THREAD_IN_REGISTERS];
-            unsigned int relu_mask[PIXELS_PER_THREAD_IN_REGISTERS];
+            bitmask_t relu_mask[PIXELS_PER_THREAD_IN_REGISTERS];
             #pragma unroll
             for (int i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i) {
                 const int idx = nhw_regs + thread_in_cta_nhw + i*PIXELS_PER_LDG;
@@ -2587,7 +2597,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     }
 
                     if (lane_id < ELEMENTS_PER_LDG) {
-                        relu_mask[i] = gmem_relu_bitmask[idx * 2 + lane_id];
+                        relu_mask[i] = gmem_relu_bitmask[idx * BITMASK_OFFSET + lane_id];
                     }
                 }
             }
@@ -2602,7 +2612,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                 #pragma unroll
                 for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
                     rectified[j] = ((shfl_sync(relu_mask[i], j) &
-                                    (1U << lane_id)) != 0);
+                                    (ONE_BITMASK << lane_id)) != 0);
                 }
                 to_float(x_math, x_storage[i]);
                 to_float(dy_math, dy_storage[i]);
@@ -2642,7 +2652,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                 const bool is_pixel_valid = is_pixel_valid_nhw && is_valid_c;
                 PackedStorageType x_storage_local[PACKED_ELEMENTS_PER_LDG],
                                   dy_storage_local[PACKED_ELEMENTS_PER_LDG];
-                unsigned int relu_mask;
+                bitmask_t relu_mask;
 #ifdef __HIP_PLATFORM_HCC__
                 int lane_id = threadIdx.x & 63;
 #else
@@ -2656,14 +2666,14 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                         ldg_stream(dy_storage_local, &gmem_dy[idx*params.c]);
                     }
                     if (lane_id < ELEMENTS_PER_LDG) {
-                        relu_mask = gmem_relu_bitmask[idx * 2 + lane_id];
+                        relu_mask = gmem_relu_bitmask[idx * BITMASK_OFFSET + lane_id];
                     }
                 }
                 bool rectified[ELEMENTS_PER_LDG];
                 #pragma unroll
                 for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
                     rectified[j] = ((shfl_sync(relu_mask, j) &
-                                    (1U << lane_id)) != 0);
+                                    (ONE_BITMASK << lane_id)) != 0);
                 }
 
                 // The offset to store in SMEM.
