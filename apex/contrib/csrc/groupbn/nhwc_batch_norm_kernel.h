@@ -2644,7 +2644,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                                   dy_storage_local[PACKED_ELEMENTS_PER_LDG];
                 unsigned int relu_mask;
 #ifdef __HIP_PLATFORM_HCC__
-                int lane_id = threadIdx.x & 32;
+                int lane_id = threadIdx.x & 63;
 #else
                 int lane_id = threadIdx.x & 31;
 #endif
