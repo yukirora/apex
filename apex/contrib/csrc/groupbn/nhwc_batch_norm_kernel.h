@@ -1041,11 +1041,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             // We cannot load everything to store persistently, so let's makes sure registers and
             // smem are fully utilized, offset is evenly divisible by 32
             int offset = (pixels_per_iteration * OUTER_LOOPS +
-#ifdef __HIP_PLATFORM_HCC__
-                          PIXELS_PER_CTA_IN_SMEM * gridDim.x - params.nhw) & ~63;
-#else
                           PIXELS_PER_CTA_IN_SMEM * gridDim.x - params.nhw) & ~31;
-#endif
             cta_nhw_regs -= offset;
             cta_nhw_smem -= offset;
         }
@@ -2544,11 +2540,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             // We cannot load everything to store persistently, so let's makes sure registers and
             // smem are fully utilized, offset is evenly divisible by 32
             int offset = (pixels_per_iteration * OUTER_LOOPS + PIXELS_PER_CTA_IN_SMEM * gridDim.x -
-#ifdef __HIP_PLATFORM_HCC__
-                          params.nhw) & ~63;
-#else
                           params.nhw) & ~31;
-#endif
             cta_nhw_regs -= offset;
             cta_nhw_smem -= offset;
         }
