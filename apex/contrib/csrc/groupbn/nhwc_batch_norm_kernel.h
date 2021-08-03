@@ -982,6 +982,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     // Shared memory buffer to store the extra pixels.
     extern __shared__ PackedStorageType smem_storage_packed[];
 
+    const half zero_h = __float2half(0.0F);
+
     for (int c_blk_index = blockIdx.y; c_blk_index < params.c_blks; c_blk_index += gridDim.y) {
         // The position in the NHW dimension where the CTA starts.
         int cta_nhw_regs = blockIdx.x * PIXELS_PER_CTA_IN_REGISTERS;
@@ -1433,7 +1435,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                        bool rectified = x_math[j] <= 0.0F;
+                        bool rectified = __hle(__float2half(x_math[j]), zero_h);
                         bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             // Thread 0 remembers the relu_mask from the first time through this
@@ -1500,7 +1502,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-                        bool rectified = x_math[j] <= 0.0F;
+                        bool rectified = __hle(__float2half(x_math[j]), zero_h);
                         bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             relu_mask = local_relu_mask;
