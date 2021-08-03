@@ -1894,21 +1894,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dscale, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -1916,21 +1916,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dbias, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2308,21 +2308,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dscale, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2330,21 +2330,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dbias, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2762,21 +2762,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dscale, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2784,21 +2784,21 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
+#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
         } else {
+#endif
 #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
 #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
 #endif
                 smem, dbias, thread_in_cta_nhw);
+#ifndef __HIP_PLATFORM_HCC__
         }
+#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
