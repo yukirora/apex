@@ -1,4 +1,4 @@
-python scripts/amd/apex_gbn_add_relu_test.py
+# python scripts/amd/apex_gbn_add_relu_test.py
 
 # gdb -ex "set breakpoint pending on" \
 #     -ex 'break _fwdKernelLauncher' \
@@ -11,3 +11,5 @@ python scripts/amd/apex_gbn_add_relu_test.py
 
 # python -m pdb \
 #     -c c scripts/amd/apex_gbn_add_relu_test.py
+
+pytest -v apex/contrib/test/groupbn/test_groupbn.py
