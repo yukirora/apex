@@ -745,11 +745,7 @@ DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
 template< int THREADS_PER_CTA, int THREADS_PER_PIXEL, int ELEMENTS_PER_LDG >
 DEVICE_FUNCTION void parallel_sums(float *smem, float (&x)[ELEMENTS_PER_LDG], int nhw) {
     // The size of a warp.
-#ifdef __HIP_PLATFORM_HCC__
-    const int THREADS_PER_WARP = 64;
-#else
-    const int THREADS_PER_WARP = 32;
-#endif
+    const int THREADS_PER_WARP = warpSize;
     // The number of warps in a CTA.
     const int WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of pixels computed by a single warp.
