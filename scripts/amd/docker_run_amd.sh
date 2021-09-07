@@ -12,6 +12,7 @@ VOLUMES="-v $HOME/dockerx:/dockerx -v /data:/data"
 WORK_DIR='/dockerx/apex_rocm'
 
 IMAGE_NAME=rocm/pytorch
+#  IMAGE_NAME=rocm/pytorch:rocm4.3_ubuntu18.04_py3.6_pytorch
 
 
 CONTAINER_ID=$(drun -d -w $WORK_DIR $MEMORY $VOLUMES $DEVICES $IMAGE_NAME)
