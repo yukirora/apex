@@ -116,6 +116,29 @@ void multi_tensor_scale_cuda(
   std::vector<std::vector<at::Tensor>> tensor_lists,
   float scale)
 {
+  std::cerr << "multi_tensor_scale_cuda"
+    << " chunk_size=" << chunk_size
+    << " tensor_lists.size()=" << tensor_lists.size()
+    << " scale=" << scale
+    << std::endl;
+  for (int l = 0; l < tensor_lists.size(); l++) {
+    std::cerr << "tensor_lists[" << l << "]"
+      << " size=" << tensor_lists[l].size()
+      << std::endl;
+    for (int t = 0; t < tensor_lists[l].size(); t++) {
+      auto& tensor = tensor_lists[l][t];
+      std::cerr << "tensor_lists[" << l << "][" << t << "]"
+        << " sizes=" << tensor.sizes()
+        << " strides=" << tensor.strides()
+        << " numel=" << tensor.numel()
+        << " itemsize=" << tensor.itemsize()
+        << " sparse=" << tensor.is_sparse()
+        << " contig=" << tensor.is_contiguous()
+        << " data_ptr=" << ((void*)tensor.data_ptr())
+        << std::endl;
+    }
+  }
+
   using namespace at;
   // The output (downscaled) type is always float.
   // If build times suffer, think about where to put this dispatch,
