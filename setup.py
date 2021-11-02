@@ -462,14 +462,7 @@ if "--fast_multihead_attn" in sys.argv:
                           include_dirs=[os.path.join(this_dir, 'csrc'),
                                         os.path.join(this_dir, 'apex/contrib/csrc/multihead_attn')],
                           extra_compile_args={'cxx': ['-O3',] + version_dependent_macros + generator_flag,
-                                              'nvcc':['-O3',
-                                                      '-gencode', 'arch=compute_70,code=sm_70',
-                                                      '-U__CUDA_NO_HALF_OPERATORS__',
-                                                      '-U__CUDA_NO_HALF_CONVERSIONS__',
-                                                      '--expt-relaxed-constexpr',
-                                                      '--expt-extended-lambda',
-                                                      '--use_fast_math'] + version_dependent_macros + generator_flag + cc_flag},
-                          include_dirs=[os.path.join(this_dir, "apex/contrib/csrc/multihead_attn/cutlass")]))
+                                              'nvcc':nvcc_args_mha if not IS_ROCM_PYTORCH else hipcc_args_mha}))
         ext_modules.append(
             CUDAExtension(name='fast_mask_softmax_dropout',
                           sources=['apex/contrib/csrc/multihead_attn/masked_softmax_dropout_cpp.cpp',
