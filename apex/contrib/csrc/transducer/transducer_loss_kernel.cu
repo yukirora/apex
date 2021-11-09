@@ -1,10 +1,11 @@
-#include <torch/extension.h>
+#include <vector>
+
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <vector>
+
+#include <torch/extension.h>
 #include <ATen/ATen.h>
 #include <ATen/AccumulateType.h>
-#include <THC/THC.h>
 #include <ATen/cuda/CUDAContext.h>
 
 template<typename scalar_t>
@@ -639,7 +640,7 @@ std::vector<torch::Tensor> transducer_loss_cuda_forward(
                 loss.data_ptr<scalar_t>());  
 
     }));
-    THCudaCheck(cudaGetLastError());
+    C10_CUDA_CHECK(cudaGetLastError());
 
     return {alpha, beta, loss};
 }
@@ -760,7 +761,7 @@ torch::Tensor transducer_loss_cuda_backward(
                 xGrad.data_ptr<scalar_t>());
         }));
     }
-    THCudaCheck(cudaGetLastError());
+    C10_CUDA_CHECK(cudaGetLastError());
     
     return xGrad;
 }

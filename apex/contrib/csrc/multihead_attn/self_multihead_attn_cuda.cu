@@ -1,18 +1,18 @@
 #include <vector>
+#include <math.h>
 #include <iostream>
+
 //below lines enable hip float to half conversion which are disabled by default in hip_fp16.h
 #undef __HIP_NO_HALF_OPERATORS__
 #undef __HIP_NO_HALF_CONVERSIONS__
-//#endif
-#include <ATen/ATen.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
-//#include <cuda_profiler_api.h>
-#include "THC/THC.h"
+// #include <cuda_profiler_api.h>
+
+#include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/extension.h>
-#include <math.h>
 
 #include "strided_batched_gemm.h"
 #include "softmax.h"
@@ -286,17 +286,9 @@ std::vector<torch::Tensor> bwd_cuda(
   char a_layout_t{'t'};
   char b_layout_n{'n'};
   char b_layout_t{'t'}; 
- 
   // Output Linear Dgrad
   THCublasCheck(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
-                             CUBLAS_OP_N,
-                             embed_dim, 
-                             batches, 
-                             embed_dim,
-                             static_cast<const void*>(&alpha),
-                             static_cast<const void*>(output_weights.data_ptr()),
-                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(output_grads.data_ptr()),
                              rocblas_datatype_f16_r, 
