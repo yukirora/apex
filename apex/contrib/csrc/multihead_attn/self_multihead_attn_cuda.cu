@@ -82,7 +82,7 @@ std::vector<torch::Tensor> fwd_cuda(
   char b_layout_n{'n'};
 
   // Input Linear Fwd
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_T, 
                              CUBLAS_OP_N,
                              output_lin_dim, 
@@ -195,7 +195,7 @@ std::vector<torch::Tensor> fwd_cuda(
                              attn_batches);
 
   // Output Linear
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_T, 
                              CUBLAS_OP_N,
                              embed_dim, 
@@ -287,7 +287,7 @@ std::vector<torch::Tensor> bwd_cuda(
   char b_layout_n{'n'};
   char b_layout_t{'t'}; 
   // Output Linear Dgrad
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              embed_dim,
                              static_cast<const void*>(output_grads.data_ptr()),
@@ -306,7 +306,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
  
   // Output Linear Wgrad
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_T,
                              embed_dim, 
@@ -443,7 +443,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              attn_batches);
 
   // Input Linear Dgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N,
                              embed_dim,
@@ -469,7 +469,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
   
   // Input Linear Wgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_T,
                              embed_dim, 

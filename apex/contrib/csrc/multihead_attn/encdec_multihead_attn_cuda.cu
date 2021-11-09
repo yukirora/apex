@@ -88,7 +88,7 @@ std::vector<torch::Tensor> fwd_cuda(
 
   
   // Input Linear Q Fwd
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_T, 
                              CUBLAS_OP_N,
                              output_lin_q_dim, 
@@ -114,7 +114,7 @@ std::vector<torch::Tensor> fwd_cuda(
                              flags));
   
   // Input Linear KV Fwd
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_T, 
                              CUBLAS_OP_N,
                              output_lin_kv_dim, 
@@ -227,7 +227,7 @@ std::vector<torch::Tensor> fwd_cuda(
                              attn_batches);
 
   // Output Linear
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_T, 
                              CUBLAS_OP_N,
                              embed_dim, 
@@ -331,7 +331,7 @@ std::vector<torch::Tensor> bwd_cuda(
   char b_layout_t{'t'}; 
   
   // Output Linear Dgrad
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N,
                              embed_dim, 
@@ -357,7 +357,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
  
   // Output Linear Wgrad
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_T,
                              embed_dim, 
@@ -494,7 +494,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              attn_batches);
 
   // Input Linear Q Dgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N,
                              embed_dim,
@@ -520,7 +520,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
   
   // Input Linear Q Wgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_T,
                              embed_dim, 
@@ -546,7 +546,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
   
   // Input Linear KV Dgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_N,
                              embed_dim,
@@ -572,7 +572,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              flags));
   
   // Input Linear KV Wgrad  
-  THCublasCheck(rocblas_gemm_ex(handle,
+  TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 
                              CUBLAS_OP_T,
                              embed_dim, 

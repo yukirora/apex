@@ -45,7 +45,7 @@ void RocblasStridedBatchedGemm(THCState *state, char transa, char transb, long m
     cublasSetStream(handle, stream);
     float fAlpha = alpha;
     float fBeta = beta;
-    THCublasCheck(rocblas_gemm_strided_batched_ex(handle,
+    TORCH_CUDABLAS_CHECK(rocblas_gemm_strided_batched_ex(handle,
                                      opa, opb, (int)m, (int)n, (int)k,
                                      (void*)&fAlpha, a, a_type, (int)lda, strideA,
                                      b, b_type, (int)ldb, strideB,
