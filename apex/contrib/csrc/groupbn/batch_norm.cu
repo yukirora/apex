@@ -45,6 +45,12 @@ struct Workspace {
   void* data;
 };
 
+static at::MemoryFormat get_memory_layout(const at::Tensor& x) {
+  return x.is_contiguous(at::MemoryFormat::ChannelsLast) ?
+    at::MemoryFormat::ChannelsLast :
+    at::MemoryFormat::Contiguous;
+}
+
 // Return {y}
 at::Tensor nhwc_bn_fwd_train(
                        const at::Tensor& x,
@@ -68,17 +74,19 @@ at::Tensor nhwc_bn_fwd_train(
                        const int grid_dim_x,
                        const bool coop) {
 
+  const bool is_channels_last = x.is_contiguous(at::MemoryFormat::ChannelsLast);
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // generating new magic number and use that for sync
   int* magic = magic_tensor.DATA_PTR<int>();
   *magic = (*magic + 1) & 0xff;
 
   // Allocate output tensor
-  at::Tensor y = at::empty({N, H, W, C}, x.options());
+  at::Tensor y = (is_channels_last ? at::empty({N, C, H, W}, x.options()) :
+                  at::empty({N, H, W, C}, x.options())).contiguous(get_memory_layout(x));
 
   // Create wrapper
   NhwcBatchNorm *bn = new NhwcBatchNorm();
@@ -152,13 +160,15 @@ at::Tensor nhwc_bn_fwd_eval(
                        const float epsilon,
                        const bool fuse_relu) {
 
+  const bool is_channels_last = x.is_contiguous(at::MemoryFormat::ChannelsLast);
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // Allocate output tensor
-  at::Tensor y = at::empty({N, H, W, C}, x.options());
+  at::Tensor y = (is_channels_last ? at::empty({N, C, H, W}, x.options()) :
+                  at::empty({N, H, W, C}, x.options())).contiguous(get_memory_layout(x));
 
   // Create wrapper
   NhwcBatchNorm *bn = new NhwcBatchNorm();
@@ -244,10 +254,11 @@ std::vector<at::Tensor> nhwc_bn_bwd(
                        const int grid_dim_x,
                        const bool coop) {
   // shape
+  const bool is_channels_last = x.is_contiguous(at::MemoryFormat::ChannelsLast);
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // generating new magic number and use that for sync
   int* magic = magic_tensor.DATA_PTR<int>();
@@ -257,9 +268,9 @@ std::vector<at::Tensor> nhwc_bn_bwd(
   at::Tensor x_grad, scale_grad, bias_grad;
 
   // Allocate outputs
-  x_grad = at::empty_like(x);
-  scale_grad = at::empty_like(scale);
-  bias_grad = at::empty_like(bias);
+  x_grad = at::empty_like(x).contiguous(get_memory_layout(x));
+  scale_grad = at::empty_like(scale).contiguous(get_memory_layout(scale));
+  bias_grad = at::empty_like(bias).contiguous(get_memory_layout(bias));
 
   // Create wrapper
   NhwcBatchNorm *bn = new NhwcBatchNorm();
