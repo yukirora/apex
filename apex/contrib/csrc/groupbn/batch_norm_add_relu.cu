@@ -65,17 +65,20 @@ at::Tensor nhwc_bn_addrelu_fwd_train(
                        const int grid_dim_x,
                        const bool coop) {
 
+  const at::MemoryFormat mem_layout = x.suggest_memory_format();
+  const bool is_channels_last = mem_layout == at::MemoryFormat::ChannelsLast;
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // generating new magic number and use that for sync
   int* magic = magic_tensor.DATA_PTR<int>();
   *magic = (*magic + 1) & 0xff;
 
   // Allocate output tensor
-  at::Tensor y = at::empty({N, H, W, C}, x.options());
+  at::Tensor y = (is_channels_last ? at::empty({N, C, H, W}, x.options()) :
+                  at::empty({N, H, W, C}, x.options())).contiguous(mem_layout);
 
   // Create wrapper
   NhwcBatchNormAddRelu *bn = new NhwcBatchNormAddRelu();
@@ -86,11 +89,11 @@ at::Tensor nhwc_bn_addrelu_fwd_train(
   bn->setConstants(momentum, epsilon);
 
   // set pointers within the wrapper
-  bn->setInputOutputPointers(x.contiguous().DATA_PTR<at::Half>(),
+  bn->setInputOutputPointers(x.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              nullptr,
                              y.DATA_PTR<at::Half>(),
                              nullptr,
-                             z.contiguous().DATA_PTR<at::Half>(),
+                             z.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              nullptr);
 
   bn->setWeightPointers({scale.contiguous().DATA_PTR<float>(),
@@ -153,13 +156,16 @@ at::Tensor nhwc_bn_addrelu_fwd_eval(
                        const float momentum,
                        const float epsilon) {
 
+  const at::MemoryFormat mem_layout = x.suggest_memory_format();
+  const bool is_channels_last = mem_layout == at::MemoryFormat::ChannelsLast;
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // Allocate output tensor
-  at::Tensor y = at::empty({N, H, W, C}, x.options());
+  at::Tensor y = (is_channels_last ? at::empty({N, C, H, W}, x.options()) :
+                  at::empty({N, H, W, C}, x.options())).contiguous(mem_layout);
 
   // Create wrapper
   NhwcBatchNormAddRelu *bn = new NhwcBatchNormAddRelu();
@@ -170,11 +176,11 @@ at::Tensor nhwc_bn_addrelu_fwd_eval(
   bn->setConstants(momentum, epsilon);
 
   // set pointers within the wrapper
-  bn->setInputOutputPointers(x.contiguous().DATA_PTR<at::Half>(),
+  bn->setInputOutputPointers(x.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              nullptr,
                              y.DATA_PTR<at::Half>(),
                              nullptr,
-                             z.contiguous().DATA_PTR<at::Half>(),
+                             z.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              nullptr);
 
   bn->setWeightPointers({scale.contiguous().DATA_PTR<float>(),
@@ -248,10 +254,12 @@ std::vector<at::Tensor> nhwc_bn_addrelu_bwd(
                        const int grid_dim_x,
                        const bool coop) {
   // shape
+  const at::MemoryFormat mem_layout = x.suggest_memory_format();
+  const bool is_channels_last = mem_layout == at::MemoryFormat::ChannelsLast;
   const int N = x.size(0);
-  const int H = x.size(1);
-  const int W = x.size(2);
-  const int C = x.size(3);
+  const int H = is_channels_last ? x.size(2) : x.size(1);
+  const int W = is_channels_last ? x.size(3) : x.size(2);
+  const int C = is_channels_last ? x.size(1) : x.size(3);
 
   // generating new magic number and use that for sync
   int* magic = magic_tensor.DATA_PTR<int>();
@@ -261,8 +269,8 @@ std::vector<at::Tensor> nhwc_bn_addrelu_bwd(
   at::Tensor x_grad, z_grad, scale_grad, bias_grad;
 
   // Allocate outputs
-  x_grad = at::empty_like(x);
-  z_grad = at::empty_like(x);
+  x_grad = at::empty_like(x).contiguous(mem_layout);
+  z_grad = at::empty_like(x).contiguous(mem_layout);
   scale_grad = at::empty_like(scale);
   bias_grad = at::empty_like(bias);
 
@@ -275,10 +283,10 @@ std::vector<at::Tensor> nhwc_bn_addrelu_bwd(
   bn->setConstants(momentum, epsilon);
 
   // set pointers within the wrapper
-  bn->setInputOutputPointers(x.contiguous().DATA_PTR<at::Half>(),
+  bn->setInputOutputPointers(x.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              x_grad.DATA_PTR<at::Half>(),
                              nullptr,
-                             dy.contiguous().DATA_PTR<at::Half>(),
+                             dy.contiguous(mem_layout).DATA_PTR<at::Half>(),
                              nullptr,
                              z_grad.DATA_PTR<at::Half>());
 
