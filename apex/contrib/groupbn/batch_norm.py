@@ -68,7 +68,7 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
     def forward(ctx, x, z, s, b, rm, riv, mini_m, mini_riv, grid_dim_y, ret_cta, mom, epsilon, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream):
         # Check if both input tensors are channels last
         channels_last = is_channels_last(x)
-        assert channels_last and is_channels_last(z), "Both tensors x and z must have the same data layout"
+        assert channels_last == is_channels_last(z), "Both tensors x and z must have the same data layout"
 
         if is_train:
             if IS_ROCM_PYTORCH:
