@@ -137,9 +137,9 @@ if (TORCH_MAJOR > 1) or (TORCH_MAJOR == 1 and TORCH_MINOR > 4):
     version_ge_1_5 = ['-DVERSION_GE_1_5']
 version_dependent_macros = version_ge_1_1 + version_ge_1_3 + version_ge_1_5
 
-if "--distributed_adam" in sys.argv:
+if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--distributed_adam")
+    #sys.argv.remove("--distributed_adam")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -158,9 +158,9 @@ if "--distributed_adam" in sys.argv:
                           extra_compile_args={'cxx': ['-O3',] + version_dependent_macros,
                                               'nvcc':nvcc_args_adam if not IS_ROCM_PYTORCH else hipcc_args_adam}))
 
-if "--distributed_lamb" in sys.argv:
+if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--distributed_lamb")
+    #sys.argv.remove("--distributed_lamb")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -238,9 +238,9 @@ if "--cuda_ext" in sys.argv:
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':['-O3'] + version_dependent_macros}))
 
-if "--bnp" in sys.argv:
+if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--bnp")
+    #sys.argv.remove("--bnp")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -262,9 +262,9 @@ if "--bnp" in sys.argv:
                                                       '-D__CUDA_NO_HALF_CONVERSIONS__',
                                                       '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros}))
 
-if "--xentropy" in sys.argv:
+if "--xentropy" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--xentropy")
+    #sys.argv.remove("--xentropy")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -283,9 +283,9 @@ if "--xentropy" in sys.argv:
                                               'nvcc':['-O3'] + version_dependent_macros}))
 
 
-if "--deprecated_fused_adam" in sys.argv:
+if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--deprecated_fused_adam")
+    #sys.argv.remove("--deprecated_fused_adam")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -305,9 +305,9 @@ if "--deprecated_fused_adam" in sys.argv:
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc' : nvcc_args_fused_adam if not IS_ROCM_PYTORCH else hipcc_args_fused_adam}))
 
-if "--deprecated_fused_lamb" in sys.argv:
+if "--deprecated_fused_lamb" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--deprecated_fused_lamb")
+    #sys.argv.remove("--deprecated_fused_lamb")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -365,9 +365,9 @@ if "--fast_layer_norm" in sys.argv:
                                                       '--expt-extended-lambda',
                                                       '--use_fast_math'] + version_dependent_macros + generator_flag + cc_flag}))
 
-if "--fast_multihead_attn" in sys.argv:
+if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--fast_multihead_attn")
+    #sys.argv.remove("--fast_multihead_attn")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
