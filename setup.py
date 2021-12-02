@@ -181,7 +181,7 @@ if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    sys.argv.remove("--cuda_ext")
+    #sys.argv.remove("--cuda_ext")
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--cuda_ext was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
