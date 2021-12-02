@@ -139,7 +139,8 @@ version_dependent_macros = version_ge_1_1 + version_ge_1_3 + version_ge_1_5
 
 if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--distributed_adam")
+    if "--distributed_adam" in sys.argv:
+        sys.argv.remove("--distributed_adam")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -160,7 +161,8 @@ if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--distributed_lamb")
+    if "--distributed_lamb" in sys.argv:
+        sys.argv.remove("--distributed_lamb")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -181,7 +183,6 @@ if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--cuda_ext")
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--cuda_ext was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -240,7 +241,8 @@ if "--cuda_ext" in sys.argv:
 
 if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--bnp")
+    if "--bnp" in sys.argv:
+        sys.argv.remove("--bnp")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -264,7 +266,8 @@ if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--xentropy" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--xentropy")
+    if "--xentropy" in sys.argv:
+        sys.argv.remove("--xentropy")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -285,7 +288,8 @@ if "--xentropy" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--deprecated_fused_adam")
+    if "--deprecated_fused_adam" in sys.argv:
+        sys.argv.remove("--deprecated_fused_adam")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -307,7 +311,8 @@ if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
 
 if "--deprecated_fused_lamb" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--deprecated_fused_lamb")
+    if "--deprecated_fused_lamb" in sys.argv:
+        sys.argv.remove("--deprecated_fused_lamb")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension
@@ -367,7 +372,8 @@ if "--fast_layer_norm" in sys.argv:
 
 if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
-    #sys.argv.remove("--fast_multihead_attn")
+    if "--fast_multihead_attn" in sys.argv:
+        sys.argv.remove("--fast_multihead_attn")
 
     from torch.utils.cpp_extension import BuildExtension
     cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
@@ -464,6 +470,9 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
                                         os.path.join(this_dir, 'apex/contrib/csrc/multihead_attn')],
                           extra_compile_args={'cxx': ['-O3',] + version_dependent_macros + generator_flag,
                                               'nvcc':nvcc_args_mha if not IS_ROCM_PYTORCH else hipcc_args_mha}))
+
+if "--cuda_ext" in sys.argv:
+    sys.argv.remove("--cuda_ext")
 
 setup(
     name='apex',
