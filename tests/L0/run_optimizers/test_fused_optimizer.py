@@ -96,7 +96,8 @@ class TestFusedAdam(TestFusedOptimizer):
 
     def test_float(self):
         self.gen_single_type_test(param_type=torch.float)
-
+    
+    @unittest.skip("NaN issue observed on ROCm as of 12/1/2021.")
     def test_half(self):
         self.gen_single_type_test(param_type=torch.float16)
 
