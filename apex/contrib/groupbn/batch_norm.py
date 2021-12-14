@@ -15,11 +15,23 @@ def check_if_rocm_pytorch():
 def is_channels_last(tensor):
     return tensor.is_contiguous(memory_format=torch.channels_last)
 
+def convert_input_tensor(tensor, use_pytorch_channels_last):
+    channels_last = is_channels_last(tensor)
+    # Convert tensor from contiguous_format to channels_last if use PyTorch's channels_last
+    if use_pytorch_channels_last and not channels_last:
+        tensor = tensor.to(memory_format=torch.channels_last)
+        channels_last = True
+    assert use_pytorch_channels_last == channels_last, \
+            "Tensor's memory format ({}) does not match use_pytorch_channels_last ({})" \
+            .format("torch.channels_last" if channels_last else "torch.contiguous_format", use_pytorch_channels_last)
+    return tensor
+
 IS_ROCM_PYTORCH = check_if_rocm_pytorch()
 
 class bn_NHWC_impl(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream):
+    def forward(ctx, x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream, use_pytorch_channels_last):
+        x = convert_input_tensor(x, use_pytorch_channels_last)
         if is_train:
             ctx.save_for_backward(x, s, b, rm, riv, mini_m, mini_riv)
             ctx.epsilon = epsilon
@@ -35,6 +47,7 @@ class bn_NHWC_impl(torch.autograd.Function):
             ctx.bwd_occup = bwd_occup
             ctx.bwd_grid_x = bwd_grid_x
             ctx.multi_stream = multi_stream
+            ctx.use_pytorch_channels_last = use_pytorch_channels_last
 
             res =  bnp.bn_fwd_nhwc(x, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, fwd_occup, fwd_grid_x, multi_stream)
             return res
@@ -43,6 +56,7 @@ class bn_NHWC_impl(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_y):
+        grad_y = convert_input_tensor(grad_y, ctx.use_pytorch_channels_last)
         x, s, b, rm, riv, mini_m, mini_riv = ctx.saved_variables
         epsilon = ctx.epsilon
         mom = ctx.momentum
@@ -60,19 +74,17 @@ class bn_NHWC_impl(torch.autograd.Function):
 
         dx, dscale, dbias = bnp.bn_bwd_nhwc(x, grad_y, s, b, rm, riv, mini_m, mini_riv, ret_cta, mom, epsilon, fuse_relu, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, bwd_occup, bwd_grid_x, multi_stream)
 
-        return dx, dscale, dbias, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+        return dx, dscale, dbias, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
 
 class bn_addrelu_NHWC_impl(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, z, s, b, rm, riv, mini_m, mini_riv, grid_dim_y, ret_cta, mom, epsilon, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream):
-        # Check if both input tensors are channels last
-        channels_last = is_channels_last(x)
-        assert channels_last == is_channels_last(z), "Both tensors x and z must have the same data layout"
-
+    def forward(ctx, x, z, s, b, rm, riv, mini_m, mini_riv, grid_dim_y, ret_cta, mom, epsilon, is_train, bn_group, my_data, pair_data, magic, pair_data2, pair_data3, fwd_occup, fwd_grid_x, bwd_occup, bwd_grid_x, multi_stream, use_pytorch_channels_last):
+        x = convert_input_tensor(x, use_pytorch_channels_last)
+        z = convert_input_tensor(z, use_pytorch_channels_last)
         if is_train:
             if IS_ROCM_PYTORCH:
-                N, H, W = (0, 2, 3) if channels_last else (0, 1, 2)
+                N, H, W = (0, 2, 3) if is_channels_last(x) else (0, 1, 2)
                 nhw = x.shape[N] * x.shape[H] * x.shape[W]
                 bitmask = torch.cuda.LongTensor(((nhw + 3) & ~3) * grid_dim_y)
             else:
@@ -90,6 +102,7 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
             ctx.bwd_occup = bwd_occup
             ctx.bwd_grid_x = bwd_grid_x
             ctx.multi_stream = multi_stream
+            ctx.use_pytorch_channels_last = use_pytorch_channels_last
 
             res =  bnp.bn_addrelu_fwd_nhwc(x, z, s, b, rm, riv, mini_m, mini_riv, bitmask, ret_cta, mom, epsilon, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, fwd_occup, fwd_grid_x, multi_stream)
             return res
@@ -98,6 +111,7 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_y):
+        grad_y = convert_input_tensor(grad_y, ctx.use_pytorch_channels_last)
         x, s, b, rm, riv, mini_m, mini_riv, bitmask = ctx.saved_variables
         epsilon = ctx.epsilon
         mom = ctx.momentum
@@ -114,7 +128,7 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
 
         dx, dz, dscale, dbias = bnp.bn_addrelu_bwd_nhwc(x, grad_y, s, b, rm, riv, mini_m, mini_riv, bitmask, ret_cta, mom, epsilon, my_data, pair_data, pair_data2, pair_data3, bn_group, magic, bwd_occup, bwd_grid_x, multi_stream)
 
-        return dx, dz, dscale, dbias, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
+        return dx, dz, dscale, dbias, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
 
 
@@ -122,7 +136,8 @@ class bn_addrelu_NHWC_impl(torch.autograd.Function):
 
 class BatchNorm2d_NHWC(_BatchNorm):
     # if using BatchNorm2d_NHWC simultaneously with multiple streams set multi_stream to True
-    def __init__(self, num_features, fuse_relu=False, bn_group=1, max_cta_per_sm=2, cta_launch_margin=12, multi_stream=False):
+    def __init__(self, num_features, fuse_relu=False, bn_group=1, max_cta_per_sm=2, cta_launch_margin=12, multi_stream=False,
+                 use_pytorch_channels_last=False):
         super(BatchNorm2d_NHWC, self).__init__(num_features)
 
         self.fuse_relu = fuse_relu
@@ -162,6 +177,7 @@ class BatchNorm2d_NHWC(_BatchNorm):
         # same buffer could be reused in future iterations. Currently we exposed it here instead of requesting new
         # buffer from cache allocator to avoid unnecessary initialization at future iterations.
         self.ret_cta = torch.cuda.ByteTensor(8192).fill_(0)
+        self.use_pytorch_channels_last = use_pytorch_channels_last
 
         #FIXME: turn pair handles into an array
         if bn_group>1:
@@ -226,7 +242,7 @@ class BatchNorm2d_NHWC(_BatchNorm):
                                   self.eps, self.training, self.bn_group, self.my_data, self.pair_data, (self.magic), self.pair_data2, self.pair_data3,
                                   self.addrelu_fwd_occupancy, self.addrelu_fwd_grid_dim_x,
                                   self.addrelu_bwd_occupancy, self.addrelu_bwd_grid_dim_x,
-                                  self.multi_stream)
+                                  self.multi_stream, self.use_pytorch_channels_last)
         else:
             return bn_NHWC_impl.apply(x,
                                   self.weight, self.bias,
@@ -236,7 +252,7 @@ class BatchNorm2d_NHWC(_BatchNorm):
                                   self.eps, self.fuse_relu, self.training, self.bn_group, self.my_data, self.pair_data, (self.magic), self.pair_data2, self.pair_data3,
                                   self.fwd_occupancy, self.fwd_grid_dim_x,
                                   self.bwd_occupancy, self.bwd_grid_dim_x,
-                                  self.multi_stream)
+                                  self.multi_stream, self.use_pytorch_channels_last)
 
     def __del__(self):
         if self.bn_group>1:
