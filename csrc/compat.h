@@ -7,3 +7,9 @@
 #else
 #define DATA_PTR data
 #endif
+
+#ifdef __HIP_PLATFORM_HCC__
+constexpr int GPU_WARP_SIZE = 64;
+#else
+constexpr int GPU_WARP_SIZE = 32;
+#endif
