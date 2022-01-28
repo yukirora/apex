@@ -127,7 +127,7 @@ void HgemmStridedBatched(char transa, char transb, long m,
   // gemm_switch_fp32accum(transa, transb, m, n, k, alpha, a, lda, strideA,
   //                       b, ldb, strideB, beta, c, ldc, strideC, batchCount);
   gemm_switch_fp32accum(transa, transb, m, n, k, alpha, a, lda, strideA, 
-                        b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount);
+                        b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, flags);
 }
 
 
