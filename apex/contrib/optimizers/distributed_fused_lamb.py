@@ -121,7 +121,9 @@ class DistributedFusedLAMB(torch.optim.Optimizer):
         self._verbose = verbose
         self._clip_after_ar = clip_after_ar
         self._L2_grad_norm = None
-        
+        self._set_flat_param_view = set_param_views_to_flat_buffer
+        self._skip_ag = skip_allgather
+        self._fused_norm = fused_norm if not clip_after_ar else False
         self._current_process_group = c10d._get_default_group()
         self._available_ranks = list(c10d._pg_group_ranks[self._current_process_group].keys())
         self._group_size = torch.cuda.device_count() if dwu_group_size <= 0 else dwu_group_size

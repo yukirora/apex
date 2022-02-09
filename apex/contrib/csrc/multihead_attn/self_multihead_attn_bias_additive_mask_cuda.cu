@@ -11,28 +11,21 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/extension.h>
 
-#include "dropout.h"
-#include "layer_norm.h"
-#include "softmax.h"
-#include "strided_batched_gemm.h"
+#include "dropout.cuh"
+#include "softmax.cuh"
+#include "strided_batched_gemm.cuh"
 
 namespace multihead_attn {
 namespace self_bias_additive_mask {
 namespace rocblas_gemmex {
 
-std::vector<torch::Tensor> fwd_cuda(
-                               bool                 use_time_mask,
-							   bool                 is_training,
-                               int                  heads,
-                               torch::Tensor const& inputs, 
-                               torch::Tensor const& input_weights,
-                               torch::Tensor const& output_weights,
-                               torch::Tensor const& input_biases,
-                               torch::Tensor const& output_biases,
-                               const half*       pad_mask,
-                               float                dropout_prob
-                                   ) 
-{
+std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
+                                    int heads, torch::Tensor const& inputs, 
+                                    torch::Tensor const& input_weights,
+                                    torch::Tensor const& output_weights,
+                                    torch::Tensor const& input_biases,
+                                    torch::Tensor const& output_biases,
+                                    const half* pad_mask, float dropout_prob) {
   const int   embed_dim      = inputs.size(2);
   const int   sequences      = inputs.size(1);
   const int   q_seq_len      = inputs.size(0);
@@ -375,14 +368,10 @@ std::vector<torch::Tensor> bwd_cuda(
                              static_cast<half* const>(matmul2_grads.data_ptr()), 
                              reinterpret_cast<half const*>(bmm1_results.data_ptr()),
                              reinterpret_cast<half const*>(pad_mask.data_ptr()),
-			     static_cast<uint8_t const*>(dropout_mask.data_ptr()),
-			     1.0/(1.0-dropout_prob),
-                             k_seq_len,
-                             k_seq_len,
-			     attn_batches*q_seq_len/sequences,
-                             attn_batches*q_seq_len,
-			     stream);
-  
+                             static_cast<uint8_t const*>(dropout_mask.data_ptr()),
+                             1.0/(1.0-dropout_prob), k_seq_len, k_seq_len,
+                             attn_batches * q_seq_len/sequences, attn_batches * q_seq_len, stream);
+                             
   // Matmul1 Dgrad1
   gemm_switch_fp32accum(     a_layout_n, 
                              b_layout_n, 
@@ -487,5 +476,5 @@ std::vector<torch::Tensor> bwd_cuda(
 }
 
 } // end namespace rocblas_gemmex
-} // end namespace self
+} // end namespace self_bias_additive_mask
 } // end namespace multihead_attn

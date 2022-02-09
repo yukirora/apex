@@ -13,12 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Model and data parallel groups."""
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 
-# TODO (mkozuki): Consider dissecting utils as this utils import is here
-# only for ensure_divisibility
 from apex.transformer.utils import ensure_divisibility
 
 
@@ -35,6 +33,7 @@ _DATA_PARALLEL_GROUP = None
 
 _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = None
 _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
+_PIPELINE_MODEL_PARALLEL_SPLIT_RANK = None
 
 # These values enable us to change the mpu sizes on the fly.
 _MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE = None
@@ -56,14 +55,19 @@ def is_unitialized():
 
 
 def initialize_model_parallel(
-    tensor_model_parallel_size_=1, pipeline_model_parallel_size_=1, virtual_pipeline_model_parallel_size_=None
-):
+        tensor_model_parallel_size_: int = 1,
+        pipeline_model_parallel_size_: int = 1,
+        virtual_pipeline_model_parallel_size_: Optional[int] = None,
+        pipeline_model_parallel_split_rank_: Optional[int] = None,
+) -> None:
     """
     Initialize model data parallel groups.
 
     Arguments:
         tensor_model_parallel_size: number of GPUs used to parallelize model tensor.
         pipeline_model_parallel_size: number of GPUs used to parallelize model pipeline.
+        virtual_pipeline_model_parallel_size: number of virtual stages (interleaved pipeline).
+        pipeline_model_parallel_split_rank: for models with both encoder and decoder, rank in pipeline with split point.
 
     Let's say we have a total of 16 GPUs denoted by g0 ... g15 and we
     use 2 GPUs to parallelize the model tensor, and 4 GPUs to parallelize
@@ -105,6 +109,10 @@ def initialize_model_parallel(
         global _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
         _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = 0
         _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = virtual_pipeline_model_parallel_size_
+
+    if pipeline_model_parallel_split_rank_ is not None:
+        global _PIPELINE_MODEL_PARALLEL_SPLIT_RANK
+        _PIPELINE_MODEL_PARALLEL_SPLIT_RANK = pipeline_model_parallel_split_rank_
 
     rank = torch.distributed.get_rank()
 
@@ -158,6 +166,15 @@ def initialize_model_parallel(
         # first and last stages).
         if len(ranks) > 1:
             embedding_ranks = [ranks[0], ranks[-1]]
+            position_embedding_ranks = [ranks[0]]
+            if (
+                pipeline_model_parallel_split_rank_ is not None and
+                ranks[pipeline_model_parallel_split_rank_] not in embedding_ranks
+            ):
+                if ranks[pipeline_model_parallel_split_rank_] not in embedding_ranks:
+                    embedding_ranks = [ranks[0], ranks[pipeline_model_parallel_split_rank_], ranks[-1]]
+                if ranks[pipeline_model_parallel_split_rank_] not in position_embedding_ranks:
+                    position_embedding_ranks = [ranks[0], ranks[pipeline_model_parallel_split_rank_]]
         else:
             embedding_ranks = ranks
         group = torch.distributed.new_group(embedding_ranks)
@@ -167,15 +184,15 @@ def initialize_model_parallel(
             _EMBEDDING_GLOBAL_RANKS = embedding_ranks
 
 def get_rank_info() -> Tuple[int, int, int]:
-    """Returns a tuple of (tensor, pipeline, data)-parallel-rank for logger."""
+    """Returns a tuple of (data, tensor, pipeline, virtual pipeline)-parallel-rank for logger."""
     if model_parallel_is_initialized():
         return (
+            get_data_parallel_rank(),
             get_tensor_model_parallel_rank(),
             get_pipeline_model_parallel_rank(),
-            # get_virtual_pipeline_model_parallel_rank(),
-            get_data_parallel_rank(),
+            get_virtual_pipeline_model_parallel_rank(),
         )
-    return (0, 0, 0)
+    return (0, 0, 0, 0)
 
 
 def model_parallel_is_initialized():
@@ -229,6 +246,44 @@ def is_rank_in_embedding_group(ignore_virtual=False):
         else:
             return True
     return False
+
+
+def is_pipeline_stage_before_split(rank=None):
+    """Return True if pipeline stage executes encoder block for a model
+    with both encoder and decoder."""
+    if get_pipeline_model_parallel_world_size() == 1:
+        return True
+    if rank is None:
+        rank = get_pipeline_model_parallel_rank()
+    global _PIPELINE_MODEL_PARALLEL_SPLIT_RANK
+    if _PIPELINE_MODEL_PARALLEL_SPLIT_RANK is None:
+        return True
+    if rank < _PIPELINE_MODEL_PARALLEL_SPLIT_RANK:
+        return True
+    return False
+
+
+def is_pipeline_stage_after_split(rank=None):
+    """Return True if pipeline stage executes decoder block for a model
+    with both encoder and decoder."""
+    if get_pipeline_model_parallel_world_size() == 1:
+        return True
+    if rank is None:
+        rank = get_pipeline_model_parallel_rank()
+    global _PIPELINE_MODEL_PARALLEL_SPLIT_RANK
+    if _PIPELINE_MODEL_PARALLEL_SPLIT_RANK is None:
+        return True
+    if rank >= _PIPELINE_MODEL_PARALLEL_SPLIT_RANK:
+        return True
+    return False
+
+
+def is_pipeline_stage_at_split():
+    """Return true if pipeline stage executes decoder block and next
+    stage executes encoder block for a model with both encoder and
+    decoder."""
+    rank = get_pipeline_model_parallel_rank()
+    return is_pipeline_stage_before_split(rank) and is_pipeline_stage_after_split(rank + 1)
 
 
 def set_tensor_model_parallel_world_size(world_size):
@@ -382,6 +437,8 @@ def destroy_model_parallel():
     _DATA_PARALLEL_GROUP = None
     global _EMBEDDING_GROUP
     _EMBEDDING_GROUP = None
+    global _POSITION_EMBEDDING_GROUP
+    _POSITION_EMBEDDING_GROUP = None
     global _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK
     _VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = None
     global _VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE
