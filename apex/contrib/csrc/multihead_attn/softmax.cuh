@@ -15,7 +15,14 @@
 #include <cuda_fp16.h>
 #include <limits>
 #include <stdint.h>
-
+#include <cuda_fp16.h>
+#include <cmath>
+ 
+#ifdef __HIP_PLATFORM_HCC__
+#define APEX_WARP_SHFL_XOR(mask, value, offset, width) __shfl_xor(value, offset, width)
+#else
+#define APEX_WARP_SHFL_XOR __shfl_xor_sync
+#endif
 namespace {
 template <typename Datatype, int ELEMENTS_PER_LDG>
 __device__ __inline__ void copy_vector(Datatype *dst, const Datatype *src);
@@ -161,7 +168,7 @@ __global__ void softmax_warp_forward(input_t *dst, const output_t *src,
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -186,7 +193,7 @@ __global__ void softmax_warp_forward(input_t *dst, const output_t *src,
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -402,7 +409,7 @@ __global__ void additive_masked_softmax_dropout_warp_forward_vec4(
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -426,7 +433,7 @@ __global__ void additive_masked_softmax_dropout_warp_forward_vec4(
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
   auto seeds = at::cuda::philox::unpack(philox_args);
@@ -564,7 +571,7 @@ __global__ void additive_masked_softmax_dropout_warp_forward(
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -588,7 +595,7 @@ __global__ void additive_masked_softmax_dropout_warp_forward(
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
   curandStatePhilox4_32_10_t state;
@@ -874,7 +881,7 @@ __global__ void additive_masked_softmax_warp_forward(
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -899,7 +906,7 @@ __global__ void additive_masked_softmax_warp_forward(
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -1164,7 +1171,7 @@ masked_softmax_warp_forward(input_t *dst, const output_t *src,
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -1189,7 +1196,7 @@ masked_softmax_warp_forward(input_t *dst, const output_t *src,
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -1414,7 +1421,7 @@ __global__ void time_masked_softmax_warp_forward(
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -1439,7 +1446,7 @@ __global__ void time_masked_softmax_warp_forward(
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -1586,13 +1593,11 @@ int log2_ceil_native(int value) {
 }
 
 template <typename T>
-__device__ __forceinline__ T
-WARP_SHFL_XOR_NATIVE(T value, int laneMask, int width = warpSize,
-                     unsigned int mask = 0xffffffff) {
-#if CUDA_VERSION >= 9000
-  return __shfl_xor_sync(mask, value, laneMask, width);
+__device__ __forceinline__ T WARP_SHFL_XOR_NATIVE(T value, int laneMask, int width = warpSize, unsigned int mask = 0xffffffff) {
+#if CUDA_VERSION >= 9000 && !defined(__HIP_PLATFORM_HCC__)
+    return __shfl_xor_sync(mask, value, laneMask, width);
 #else
-  return __shfl_xor(value, laneMask, width);
+    return __shfl_xor(value, laneMask, width);
 #endif
 }
 
@@ -2151,7 +2156,7 @@ __global__ void masked_scale_softmax_warp_backward_recompute(
     float val[WARP_BATCH];
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      val[i] = __shfl_xor_sync(FULL_MASK, max_value[i], offset, WARP_SIZE);
+      val[i] = APEX_WARP_SHFL_XOR(FULL_MASK, max_value[i], offset, WARP_SIZE);
     }
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
@@ -2176,7 +2181,7 @@ __global__ void masked_scale_softmax_warp_backward_recompute(
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -2756,7 +2761,7 @@ __global__ void softmax_warp_backward(__half *gradInput, const __half *grad,
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
@@ -2990,7 +2995,7 @@ masked_softmax_warp_backward(__half *gradInput, const __half *grad,
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
 #pragma unroll
     for (int i = 0; i < WARP_BATCH; ++i) {
-      sum[i] += __shfl_xor_sync(FULL_MASK, sum[i], offset, WARP_SIZE);
+      sum[i] += APEX_WARP_SHFL_XOR(FULL_MASK, sum[i], offset, WARP_SIZE);
     }
   }
 
