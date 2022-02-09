@@ -75,7 +75,7 @@ void cuWelfordMuSigma2(
   U& mu,
   U& sigma2,
   U* buf,
-  const int GPU_WARP_SIZE)
+  const int GPU_WARP_SIZE,
   bool rms_only)
 {
   // Assumptions:
@@ -184,7 +184,7 @@ void cuWelfordMuSigma2(
   float& mu,
   float& sigma2,
   float* buf,
-  const int GPU_WARP_SIZE)
+  const int GPU_WARP_SIZE,
   bool rms_only)
 {
   // Assumptions:
@@ -367,7 +367,7 @@ void cuApplyLayerNorm_(
   const U epsilon,
   const V* __restrict__ gamma,
   const V* __restrict__ beta,
-  const int GPU_WARP_SIZE
+  const int GPU_WARP_SIZE,
   bool rms_only
   )
 {
@@ -439,9 +439,10 @@ void cuApplyRMSNorm(
   const int n1,
   const int n2,
   const U epsilon,
-  const V* __restrict__ gamma)
+  const V* __restrict__ gamma,
+  const int warp_size)
 {
-  cuApplyLayerNorm_<T, U, V>(output_vals, NULL, invvar, vals, n1, n2, epsilon, gamma, NULL, true);
+  cuApplyLayerNorm_<T, U, V>(output_vals, NULL, invvar, vals, n1, n2, epsilon, gamma, NULL, warp_size, true);
 }
 
 template<typename T, typename U, typename V> __device__
@@ -904,7 +905,8 @@ void HostApplyRMSNorm(
     const V* gamma)
 {
     auto stream = at::cuda::getCurrentCUDAStream().stream();
-    const dim3 threads(32,4,1);
+    const int warp_size = at::cuda::getCurrentDeviceProperties()->warpSize;
+    const dim3 threads(warp_size,4,1);
     const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
     const dim3 blocks(1, std::min((uint64_t)n1, maxGridY), 1);
     int nshared =
@@ -912,7 +914,7 @@ void HostApplyRMSNorm(
             threads.y*sizeof(U)+(threads.y/2)*sizeof(U) :
             0;
     cuApplyRMSNorm<<<blocks, threads, nshared, stream>>>(
-      output, invvar, input, n1, n2, U(epsilon), gamma);
+      output, invvar, input, n1, n2, U(epsilon), gamma, warp_size);
 }
 
 void cuda_layer_norm(
