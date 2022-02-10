@@ -162,6 +162,7 @@ class TestCheckpointing(unittest.TestCase):
                             continue
 
     def test_loss_scale_decrease(self):
+        torch.manual_seed(0) # set random seed manually to prevent from the flakiness
         num_losses = 3
         nb_decrease_loss_scales = [0, 1, 2]
         for opt_level in self.test_opt_levels:
