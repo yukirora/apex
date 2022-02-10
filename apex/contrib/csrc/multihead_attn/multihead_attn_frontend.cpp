@@ -60,7 +60,7 @@ torch::Tensor bwd(bool use_mask, int heads, torch::Tensor const &output_grads,
                   dropout_prob);
 }
 
-} // namespace additive_mask_softmax_dropout
+} // namespace additive_mask_softmax_dropout (replace additive_masked_softmax_dropout_cpp.cpp)
 namespace mask_softmax_dropout {
 
 std::vector<torch::Tensor> fwd_cuda(bool is_training, int heads,
@@ -116,10 +116,10 @@ torch::Tensor bwd(bool use_mask, int heads, torch::Tensor const &output_grads,
 }
 
 } // end namespace mask_softmax_dropout
-} // end namespace fused_softmax
+} // end namespace fused_softmax (replace masked_softmax_dropout_cpp.cpp)
 
 namespace encdec {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                                     int heads, torch::Tensor const &inputs_q,
@@ -228,11 +228,11 @@ bwd(int heads, torch::Tensor const &output_grads,
                   output_weights, dropout_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // end namespace encdec
+} // end namespace rocblas_gemmex
+} // end namespace encdec (replace encdec_multihead_attn_cpp.cpp)
 
 namespace encdec_norm_add {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                                     int heads, torch::Tensor const &inputs_q,
@@ -381,11 +381,11 @@ bwd(int heads, torch::Tensor const &output_grads,
                   dropout_mask, dropout_add_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // end namespace encdec_norm_add
+} // end namespace rocblas_gemmex
+} // end namespace encdec_norm_add (replace encdec_multihead_attn_norm_add_cpp.cpp)
 
 namespace self {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                                     int heads, torch::Tensor const &inputs,
@@ -471,10 +471,10 @@ bwd(int heads, torch::Tensor const &output_grads,
                   output_weights, dropout_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // end namespace self
+} // end namespace rocblas_gemmex
+} // end namespace self (replace self_multihead_attn_cpp.cpp)
 namespace self_bias {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor>
 fwd_cuda(bool use_time_mask, bool is_training, int heads,
@@ -564,10 +564,10 @@ bwd(int heads, torch::Tensor const &output_grads,
                   output_weights, dropout_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // namespace self_bias
+} // end namespace rocblas_gemmex
+} // namespace self_bias (replace self_multihead_attn_bias_cpp.cpp)
 namespace self_bias_additive_mask {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                                     int heads, torch::Tensor const &inputs,
@@ -657,11 +657,11 @@ bwd(int heads, torch::Tensor const &output_grads,
                   input_weights, output_weights, dropout_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // namespace self_bias_additive_mask
+} // end namespace rocblas_gemmex
+} // namespace self_bias_additive_mask (replace self_multihead_attn_bias_additive_mask_cpp.cpp)
 
 namespace self_norm_add {
-namespace cublas_gemmex {
+namespace rocblas_gemmex {
 
 std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                                     int heads, torch::Tensor const &inputs,
@@ -787,8 +787,8 @@ bwd(int heads, torch::Tensor const &output_grads,
                   dropout_mask, dropout_add_mask, dropout_prob);
 }
 
-} // end namespace cublas_gemmex
-} // end namespace self_norm_add
+} // end namespace rocblas_gemmex
+} // end namespace self_norm_add (replace self_multihead_attn_norm_add_cpp.cpp)
 } // end namespace multihead_attn
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -802,31 +802,31 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         "Self Multihead Attention masked softmax dropout -- Forward.");
   m.def("mask_softmax_dropout_backward", &multihead_attn::fused_softmax::mask_softmax_dropout::bwd,
         "Self Multihead Attention masked softmax dropout -- Backward.");
-  m.def("encdec_multihead_attn_forward", &multihead_attn::encdec::cublas_gemmex::fwd,
+  m.def("encdec_multihead_attn_forward", &multihead_attn::encdec::rocblas_gemmex::fwd,
         "Encdec Multihead Attention Forward.");
-  m.def("encdec_multihead_attn_backward", &multihead_attn::encdec::cublas_gemmex::bwd,
+  m.def("encdec_multihead_attn_backward", &multihead_attn::encdec::rocblas_gemmex::bwd,
         "Encdec Multihead Attention Backward.");
-  m.def("encdec_multihead_attn_norm_add_forward", &multihead_attn::encdec_norm_add::cublas_gemmex::fwd,
+  m.def("encdec_multihead_attn_norm_add_forward", &multihead_attn::encdec_norm_add::rocblas_gemmex::fwd,
         "Encdec Multihead Attention Plus Layer Norm and Residual Add Forward.");
   m.def(
-      "encdec_multihead_attn_norm_add_backward", &multihead_attn::encdec_norm_add::cublas_gemmex::bwd,
+      "encdec_multihead_attn_norm_add_backward", &multihead_attn::encdec_norm_add::rocblas_gemmex::bwd,
       "Encdec Multihead Attention Plus Layer Norm and Residual Add Backward.");
-  m.def("self_attn_forward", &multihead_attn::self::cublas_gemmex::fwd,
+  m.def("self_attn_forward", &multihead_attn::self::rocblas_gemmex::fwd,
         "Self Multihead Attention Forward.");
-  m.def("self_attn_backward", &multihead_attn::self::cublas_gemmex::bwd,
+  m.def("self_attn_backward", &multihead_attn::self::rocblas_gemmex::bwd,
         "Self Multihead Attention Backward.");
-  m.def("self_attn_bias_forward", &multihead_attn::self_bias::cublas_gemmex::fwd,
+  m.def("self_attn_bias_forward", &multihead_attn::self_bias::rocblas_gemmex::fwd,
         "Self Multihead Attention with Bias -- Forward.");
-  m.def("self_attn_bias_backward", &multihead_attn::self_bias::cublas_gemmex::bwd,
+  m.def("self_attn_bias_backward", &multihead_attn::self_bias::rocblas_gemmex::bwd,
         "Self Multihead Attention with Bias -- Backward.");
-  m.def("self_attn_bias_additive_mask_forward", &multihead_attn::self_bias_additive_mask::cublas_gemmex::fwd,
+  m.def("self_attn_bias_additive_mask_forward", &multihead_attn::self_bias_additive_mask::rocblas_gemmex::fwd,
         "Self Multihead Attention with Bias -- Forward.");
   m.def("self_attn_bias_additive_mask_backward",
-        &multihead_attn::self_bias_additive_mask::cublas_gemmex::bwd,
+        &multihead_attn::self_bias_additive_mask::rocblas_gemmex::bwd,
         "Self Multihead Attention with Bias -- Backward.");
-  m.def("self_attn_norm_add_forward", &multihead_attn::self_norm_add::cublas_gemmex::fwd,
+  m.def("self_attn_norm_add_forward", &multihead_attn::self_norm_add::rocblas_gemmex::fwd,
         "Self Multihead Attention Plus Layer Norm and Residual Add Forward.");
-  m.def("self_attn_norm_add_backward", &multihead_attn::self_norm_add::cublas_gemmex::bwd,
+  m.def("self_attn_norm_add_backward", &multihead_attn::self_norm_add::rocblas_gemmex::bwd,
         "Self Multihead Attention Plus Layer Norm and Residual Add Backward.");
 }
 
