@@ -117,23 +117,23 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              embed_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(input_weights_q.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              //static_cast<const void*>(inputs_q.data_ptr()),
                              static_cast<const void*>(lyr_nrm_results.data_ptr()),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim, 
                              static_cast<const void*>(&beta),
                              q_lin_results_ptr,
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              output_lin_q_dim,
                              q_lin_results_ptr,
-                             d_type,
+                             rocblas_datatype_f16_r,
                              output_lin_q_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0));
   
   // Input Linear KV Fwd
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -144,22 +144,22 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              embed_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(input_weights_kv.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(inputs_kv.data_ptr()),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim, 
                              static_cast<const void*>(&beta),
                              k_lin_results_ptr,
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              output_lin_kv_dim,
                              k_lin_results_ptr,
-                             d_type,
+                             rocblas_datatype_f16_r,
                              output_lin_kv_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0));
   // MatMul1 of Dot-Product Attention Plus scaling by 1/Sqrt(head size)
   gemm_switch_fp32accum(     a_layout_t, 
                              b_layout_n, 
@@ -180,7 +180,7 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              static_cast<half*>(softmax_results_ptr),
                              k_seq_len,
                              k_seq_len*q_seq_len, 
-                             attn_batches);
+                             attn_batches); // flags
 
   // Padded Softmax
   bool softmax_success = false;
@@ -234,7 +234,7 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              static_cast<half*>(matmul2_results.data_ptr()),
                              head_dim*attn_batches,
                              head_dim, 
-                             attn_batches);
+                             attn_batches); // flags
 
   // Output Linear
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -245,22 +245,22 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              embed_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(output_weights.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(matmul2_results.data_ptr()),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim, 
                              static_cast<const void*>(&beta),
                              static_cast<void*>(output_lin_results.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(output_lin_results.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0));
 
   // End-of-block Dropout-Add 
   if (is_training) {
@@ -384,22 +384,22 @@ std::vector<torch::Tensor> bwd_cuda(
                              embed_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(output_weights.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(dropout_add_grads.data_ptr()),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim, 
                              static_cast<const void*>(&beta),
                              static_cast<void*>(output_lin_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(output_lin_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
  
   // Output Linear Wgrad
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -410,22 +410,22 @@ std::vector<torch::Tensor> bwd_cuda(
                              batches_q, 
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(matmul2_results.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(dropout_add_grads.data_ptr()),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim, 
                              static_cast<const void*>(&beta),
                              static_cast<void*>(output_weight_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(output_weight_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // MatMul2 Dgrad1
   gemm_switch_fp32accum(     a_layout_t, 
@@ -447,7 +447,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              static_cast<half*>(matmul2_grads.data_ptr()),
                              k_seq_len,
                              k_seq_len*q_seq_len,
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
   
   // Matmul2 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -469,7 +469,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              v_lin_grads_ptr,
                              lead_dim_kv,
                              batch_stride_kv,
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
 
   // Apply Dropout Mask and Scale by Dropout Probability 
   apex_masked_scale_cuda<at::Half, float, uint32_t>(
@@ -507,7 +507,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              q_lin_grads_ptr,
                              lead_dim_q,
                              batch_stride_q,
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
   
   // Matmul1 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -529,7 +529,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              k_lin_grads_ptr,
                              lead_dim_kv,
                              batch_stride_kv, 
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
 
   // Input Linear Q Dgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -540,23 +540,23 @@ std::vector<torch::Tensor> bwd_cuda(
                              output_lin_q_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(input_weights_q.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(q_lin_grads_ptr),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              output_lin_q_dim, 
                              static_cast<const void*>(&beta),
                              //static_cast<void*>(input_q_grads.data_ptr()),
                              static_cast<void*>(input_lin_q_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(input_lin_q_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // Input Linear Q Wgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -567,22 +567,22 @@ std::vector<torch::Tensor> bwd_cuda(
                              batches_q, 
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(inputs_q.data_ptr()),
-                             a_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
                              static_cast<const void*>(q_lin_grads_ptr),
-                             b_type,
+                             rocblas_datatype_f16_r,
                              output_lin_q_dim,
                              static_cast<const void*>(&beta),
                              static_cast<void*>(input_weight_q_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(input_weight_q_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // Input Linear KV Dgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -593,22 +593,22 @@ std::vector<torch::Tensor> bwd_cuda(
                              output_lin_kv_dim,
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(input_weights_kv.data_ptr()),
-                             a_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<const void*>(k_lin_grads_ptr),
-                             b_type, 
+                             rocblas_datatype_f16_r, 
                              output_lin_kv_dim, 
                              static_cast<const void*>(&beta),
                              static_cast<void*>(input_kv_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(input_kv_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // Input Linear KV Wgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -619,22 +619,22 @@ std::vector<torch::Tensor> bwd_cuda(
                              batches_kv, 
                              static_cast<const void*>(&alpha),
                              static_cast<const void*>(inputs_kv.data_ptr()),
-                             a_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
                              static_cast<const void*>(k_lin_grads_ptr),
-                             b_type,
+                             rocblas_datatype_f16_r,
                              output_lin_kv_dim,
                              static_cast<const void*>(&beta),
                              static_cast<void*>(input_weight_kv_grads.data_ptr()),
-                             c_type, 
+                             rocblas_datatype_f16_r, 
                              embed_dim,
                              static_cast<void*>(input_weight_kv_grads.data_ptr()),
-                             d_type,
+                             rocblas_datatype_f16_r,
                              embed_dim,
-                             compute_type,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_datatype_f32_r,
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
  
   // Fused Layer Norm Bwd with Residual Add
   HostLayerNormGradient<half,float>(

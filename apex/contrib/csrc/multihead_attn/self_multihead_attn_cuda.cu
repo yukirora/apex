@@ -100,9 +100,9 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              rocblas_datatype_f16_r, 
                              output_lin_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0));
 
   // MatMul1 of Dot-Product Attention Plus scaling by 1/Sqrt(head size)
   gemm_switch_fp32accum(     a_layout_t, 
@@ -124,7 +124,7 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              static_cast<half*>(softmax_results_ptr), 
                              k_seq_len, 
                              k_seq_len*q_seq_len, 
-                             attn_batches);
+                             attn_batches); // flags
 
   // Padded Softmax
   bool softmax_success = false;
@@ -177,7 +177,7 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              static_cast<half*>(matmul2_results.data_ptr()), 
                              head_dim*attn_batches, 
                              head_dim, 
-                             attn_batches);
+                             attn_batches); // flags
 
   // Output Linear
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -201,9 +201,9 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
                              rocblas_datatype_f16_r, 
                              embed_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0));
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
 
   return {input_lin_results, softmax_results, dropout_results,
@@ -288,9 +288,9 @@ std::vector<torch::Tensor> bwd_cuda(
                              rocblas_datatype_f16_r, 
                              embed_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
  
   // Output Linear Wgrad
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -314,9 +314,9 @@ std::vector<torch::Tensor> bwd_cuda(
                              rocblas_datatype_f16_r, 
                              embed_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // MatMul2 Dgrad1
   gemm_switch_fp32accum(     a_layout_t, 
@@ -338,7 +338,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              static_cast<half*>(matmul2_grads.data_ptr()),
                              k_seq_len, 
                              k_seq_len*q_seq_len,
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
   
   // Matmul2 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -360,7 +360,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              v_lin_grads_ptr, 
                              lead_dim, 
                              batch_stride, 
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
 
   // Apply Dropout Mask and Scale by Dropout Probability 
   apex_masked_scale_cuda<at::Half,float,uint32_t>(
@@ -399,7 +399,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              q_lin_grads_ptr, 
                              lead_dim, 
                              batch_stride, 
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
   
   // Matmul1 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -421,7 +421,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              k_lin_grads_ptr, 
                              lead_dim, 
                              batch_stride, 
-                             attn_batches);
+                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
 
   // Input Linear Dgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -445,9 +445,9 @@ std::vector<torch::Tensor> bwd_cuda(
                              rocblas_datatype_f16_r, 
                              embed_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   
   // Input Linear Wgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -471,9 +471,9 @@ std::vector<torch::Tensor> bwd_cuda(
                              rocblas_datatype_f16_r, 
                              embed_dim,
                              rocblas_datatype_f32_r,
-                             algo,
-                             solution_index,
-                             flags));
+                             rocblas_gemm_algo_standard,
+                             0,
+                             0)); // rocblas_gemm_flags_fp16_alt_impl
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
   
   return { 
