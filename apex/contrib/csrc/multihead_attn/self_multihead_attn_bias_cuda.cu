@@ -444,7 +444,7 @@ std::vector<torch::Tensor> bwd_cuda(
                              rocblas_datatype_f32_r,
                              rocblas_gemm_algo_standard,
                              0,
-                             0)); rocblas_gemm_flags_fp16_alt_impl
+                             0)); //rocblas_gemm_flags_fp16_alt_impl
 
   // Input Linear Wgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
