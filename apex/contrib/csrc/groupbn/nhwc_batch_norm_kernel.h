@@ -336,14 +336,9 @@ DEVICE_FUNCTION void read_from_gmem(float (&dst)[4], const float *gmem, int idx)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(float (&x)[2], const float *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[2*idx];
-    x[1] = smem[2*idx+1];
-#else
     float2 tmp = *(const float2*) &smem[2*idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -355,31 +350,19 @@ DEVICE_FUNCTION void read_from_smem(int (&x)[1], const int *smem, int idx) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(float (&x)[4], const float *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[4*idx];
-    x[1] = smem[4*idx+1];
-    x[2] = smem[4*idx+2];
-    x[3] = smem[4*idx+3];
-#else
     float4 tmp = *(const float4*) &smem[4*idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
     x[2] = tmp.z;
     x[3] = tmp.w;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(int (&x)[2], const int *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[2*idx];
-    x[1] = smem[2*idx+1];
-#else
     int2 tmp = *(const int2*) &smem[2*idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -540,6 +523,7 @@ DEVICE_FUNCTION void relu_activation(float (&x)[N]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+//// TODO: THREADS_PER_PIXEL = 16?
 template< int THREADS_PER_CTA >
 DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
                                         void* params_my_data, void** params_pair_datas, int off,
@@ -1067,7 +1051,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     const int C_ELEMENTS_PER_CTA = THREADS_PER_PIXEL*ELEMENTS_PER_LDG;
 
     // Shared memory to do CTA-wide parallel sums.
-    __shared__ float smem[THREADS_PER_PIXEL*(THREADS_PER_CTA/warpSize)*ELEMENTS_PER_LDG];
+    __shared__ float smem[THREADS_PER_PIXEL*(THREADS_PER_CTA/warpSize)*ELEMENTS_PER_LDG]; // TODO: warpSize
 
     // Compute the NHW coordinate of the thread in the CTA.
     const int thread_in_cta_nhw = threadIdx.x / THREADS_PER_PIXEL;
