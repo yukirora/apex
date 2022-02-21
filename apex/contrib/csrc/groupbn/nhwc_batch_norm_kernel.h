@@ -306,10 +306,6 @@ DEVICE_FUNCTION void stg_stream(uint16_t *gmem, float (&src)[4]) {
 #endif
 
 DEVICE_FUNCTION void read_from_gmem(float (&dst)[2], const float *gmem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    dst[0] = gmem[2*idx];
-    dst[1] = gmem[2*idx+1];
-#else
     float2 tmp = __ldg(reinterpret_cast<const float2*>(&gmem[2*idx]));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
@@ -319,18 +315,11 @@ DEVICE_FUNCTION void read_from_gmem(float (&dst)[2], const float *gmem, int idx)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_gmem(float (&dst)[4], const float *gmem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    dst[0] = gmem[4*idx];
-    dst[1] = gmem[4*idx+1];
-    dst[2] = gmem[4*idx+2];
-    dst[3] = gmem[4*idx+3];
-#else
     float4 tmp = __ldg(reinterpret_cast<const float4*>(&gmem[4*idx]));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
     dst[2] = tmp.z;
     dst[3] = tmp.w;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
