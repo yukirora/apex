@@ -309,7 +309,6 @@ DEVICE_FUNCTION void read_from_gmem(float (&dst)[2], const float *gmem, int idx)
     float2 tmp = __ldg(reinterpret_cast<const float2*>(&gmem[2*idx]));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -543,6 +542,7 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
 
 #ifdef __HIP_PLATFORM_HCC__
     for (int offset = THREADS_PER_PIXEL; offset <= THREADS_PER_WARP >> 1; offset <<= 1) {
+        #pragma unroll
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
             x[i] += shfl_sync(x[i], offset + lane_id);
         }
@@ -697,7 +697,8 @@ DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
             // Compute the updated sum.
             add(x, y);
         }
-
+        
+        #pragma unroll
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL*2+lane_id);
