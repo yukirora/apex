@@ -98,7 +98,6 @@ struct PackedStorage<uint16_t, ELEMENTS_PER_LDG> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 template< int N >
 DEVICE_FUNCTION void from_float(int (&dst)[N], const float (&src)[2*N]) {
     // Convert from two f32s to two f16s (mantissa LSB rounds to nearest even)
@@ -106,15 +105,10 @@ DEVICE_FUNCTION void from_float(int (&dst)[N], const float (&src)[2*N]) {
     half *dst_ = (half *) dst;
     #pragma unroll
     for (int i = 0; i < N; ++i) {
-#ifdef __HIP_PLATFORM_HCC__
-        dst_[2*i] = __float2half(src[2*i]);
-        dst_[2*i+1] = __float2half(src[2*i+1]);
-#else
         uint16_t lo, hi;
         asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(lo) : "f"(src[2*i+0]));
         asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(hi) : "f"(src[2*i+1]));
         asm volatile("mov.b32 %0, {%1, %2};"  : "=r"(dst[i]) : "h"(lo), "h"(hi));
-#endif
     }
 }
 
@@ -135,18 +129,13 @@ DEVICE_FUNCTION void to_float(float (&dst)[2*N], int (&src)[N]) {
     // Convert from two f16s to two f32s (From 32-bit to 64-bit)
     #pragma unroll
     for (int i = 0; i < N; ++i) {
-#ifdef __HIP_PLATFORM_HCC__
-        half *src_ = (half *) src;
-        dst[2*i] = __half2float(src_[2*i]);
-        dst[2*i+1] = __half2float(src_[2*i+1]);
-#else
         uint16_t lo, hi;
         asm volatile("mov.b32 {%0, %1}, %2;" : "=h"(lo), "=h"(hi) : "r"(src[i]));
         asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+0])   : "h"(lo));
         asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+1])   : "h"(hi));
-#endif
     }
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -167,13 +156,9 @@ DEVICE_FUNCTION void ldg(int (&dst)[1], const uint16_t *gmem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void ldg_stream(int (&dst)[1], const uint16_t *gmem) {
-#ifdef __HIP_PLATFORM_HCC__
-    dst[0] = __ldg((const int*) gmem);
-#else
     unsigned int tmp;
     asm volatile ("ld.global.cs.nc.s32 %0, [%1];"  : "=r"(tmp) : "l" ((const uint *)gmem));
     dst[0] = tmp;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,19 +172,12 @@ DEVICE_FUNCTION void ldg(int (&dst)[2], const uint16_t *gmem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void ldg_stream(int (&dst)[2], const uint16_t *gmem) {
-#ifdef __HIP_PLATFORM_HCC__
-    int2 tmp = __ldg((const int2*) gmem);
-    dst[0] = tmp.x;
-    dst[1] = tmp.y;
-#else
     int2 tmp;
     asm volatile ("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];"
         : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2 *)gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
-#endif
 }
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template< int N >
@@ -227,42 +205,22 @@ DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[1]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[1]) {
-#ifdef __HIP_PLATFORM_HCC__
-    reinterpret_cast<int*>(gmem)[0] = src[0];
-#else
     unsigned int tmp = src[0];
     asm volatile ("st.global.cs.s32 [%0], %1;"
         :: "l"((uint *)gmem) , "r"(tmp));
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    half *gmem_ = (half *) gmem;
-    half *src_ = (half *) src;
-    for (int i = 0; i < 4; i++) {
-      gmem_[i] = src_[i];
-    }
-#else
     reinterpret_cast<int2*>(gmem)[0] = make_int2(src[0], src[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    half *gmem_ = (half *) gmem;
-    half *src_ = (half *) src;
-    for (int i = 0; i < 4; i++) {
-      gmem_[i] = src_[i];
-    }
-#else
     asm volatile ("st.global.cs.v2.s32 [%0], {%1,%2};"
         :: "l"((uint *)gmem) , "r"(src[0]), "r"( src[1]));
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -356,49 +314,25 @@ DEVICE_FUNCTION void read_from_smem(int (&x)[2], const int *smem, int idx) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_gmem(float *gmem, int idx, const float (&src)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[2*idx] = src[0];
-    gmem[2*idx+1] = src[1];
-#else
     reinterpret_cast<float2*>(&gmem[2*idx])[0] = make_float2(src[0], src[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_gmem(float *gmem, int idx, const float (&src)[4]) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[4*idx] = src[0];
-    gmem[4*idx+1] = src[1];
-    gmem[4*idx+2] = src[2];
-    gmem[4*idx+3] = src[3];
-#else
     reinterpret_cast<float4*>(&gmem[4*idx])[0] = make_float4(src[0], src[1], src[2], src[3]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void scaled_write_to_gmem(float *gmem, int idx, const float (&src)[4], const float coeff) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[4*idx] = src[0]*coeff;
-    gmem[4*idx+1] = src[1]*coeff;
-    gmem[4*idx+2] = src[2]*coeff;
-    gmem[4*idx+3] = src[3]*coeff;
-#else
     reinterpret_cast<float4*>(&gmem[4*idx])[0] = make_float4(src[0]*coeff, src[1]*coeff, src[2]*coeff, src[3]*coeff);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    smem[2*idx] = x[0];
-    smem[2*idx+1] = x[1];
-#else
     reinterpret_cast<float2*>(&smem[2*idx])[0] = make_float2(x[0], x[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -410,25 +344,13 @@ DEVICE_FUNCTION void write_to_smem(int *smem, int idx, const int (&x)[1]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[4]) {
-#ifdef __HIP_PLATFORM_HCC__
-    smem[4*idx] = x[0];
-    smem[4*idx+1] = x[1];
-    smem[4*idx+2] = x[2];
-    smem[4*idx+3] = x[3];
-#else
     reinterpret_cast<float4*>(&smem[4*idx])[0] = make_float4(x[0], x[1], x[2], x[3]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_smem(int *smem, int idx, const int (&x)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    smem[2*idx] = x[0];
-    smem[2*idx+1] = x[1];
-#else
     reinterpret_cast<int2*>(&smem[2*idx])[0] = make_int2(x[0], x[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -511,7 +433,6 @@ DEVICE_FUNCTION void relu_activation(float (&x)[N]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//// TODO: THREADS_PER_PIXEL = 16?
 template< int THREADS_PER_CTA >
 DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
                                         void* params_my_data, void** params_pair_datas, int off,
@@ -860,12 +781,9 @@ DEVICE_FUNCTION void inter_block_sync(int* gmem_retired_ctas, int expected_count
         int retired_ctas = -1;
         do {
             __threadfence();
-#ifdef __HIP_PLATFORM_HCC__
-            retired_ctas = __ldg((const int*) gmem_retired_ctas);
-#else
             asm volatile ("ld.global.cg.b32 %0, [%1];"
                 : "=r"(retired_ctas) : "l"(gmem_retired_ctas));
-#endif
+
         } while (retired_ctas != 0);
     }
     __syncthreads();
