@@ -938,10 +938,6 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     // Shared memory buffer to store the extra pixels.
     extern __shared__ PackedStorageType smem_storage_packed[];
 
-#ifdef __HIP_PLATFORM_HCC__
-    const half zero_h = __float2half(0.0F);
-#endif
-
     for (int c_blk_index = blockIdx.y; c_blk_index < params.c_blks; c_blk_index += gridDim.y) {
         // The position in the NHW dimension where the CTA starts.
         int cta_nhw_regs = blockIdx.x * PIXELS_PER_CTA_IN_REGISTERS;
