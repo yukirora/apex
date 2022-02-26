@@ -440,21 +440,10 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
     const int lane_id = threadIdx.x % THREADS_PER_WARP;
     // total size of data per sync iter
     const int data_total = MAX_OFFSET*THREADS_PER_PIXEL*ELEMENTS_PER_LDG*2;
-
-#ifdef __HIP_PLATFORM_HCC__
-    for (int offset = THREADS_PER_PIXEL; offset <= THREADS_PER_WARP >> 1; offset <<= 1) {
-        #pragma unroll
-        for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-            x[i] += shfl_sync(x[i], offset + lane_id);
-        }
-    }
-#else
     #pragma unroll
     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
         x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
     }
-#endif
-
 
     // The warp leaders, write to SMEM.
     if (lane_id < THREADS_PER_PIXEL) {
@@ -479,16 +468,9 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
             add(x, y);
         }
 
-#ifdef __HIP_PLATFORM_HCC__
-        for (int offset = THREADS_PER_WARP >> 1; offset >= THREADS_PER_PIXEL; offset >>= 1) {            for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-                x[i] += shfl_sync(x[i], offset + lane_id);
-            }
-        }
-#else
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
         }
-#endif
 
         // Make sure the data was read from SMEM.
         syncwarp();
