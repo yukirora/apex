@@ -243,26 +243,6 @@ DEVICE_FUNCTION void stg_stream(uint16_t *gmem, float (&src)[N]) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef __HIP_PLATFORM_HCC__
-DEVICE_FUNCTION void stg(uint16_t *gmem, float (&src)[4]) {
-    half *gmem_ = (half *) gmem;
-    gmem_[0] = __float2half(src[0]);
-    gmem_[1] = __float2half(src[1]);
-    gmem_[2] = __float2half(src[2]);
-    gmem_[3] = __float2half(src[3]);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-DEVICE_FUNCTION void stg_stream(uint16_t *gmem, float (&src)[4]) {
-    half *gmem_ = (half *) gmem;
-    gmem_[0] = __float2half(src[0]);
-    gmem_[1] = __float2half(src[1]);
-    gmem_[2] = __float2half(src[2]);
-    gmem_[3] = __float2half(src[3]);
-}
-#endif
-
 DEVICE_FUNCTION void read_from_gmem(float (&dst)[2], const float *gmem, int idx) {
     float2 tmp = __ldg(reinterpret_cast<const float2*>(&gmem[2*idx]));
     dst[0] = tmp.x;
@@ -959,7 +939,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
     const int C_ELEMENTS_PER_CTA = THREADS_PER_PIXEL*ELEMENTS_PER_LDG;
 
     // Shared memory to do CTA-wide parallel sums.
-    __shared__ float smem[THREADS_PER_PIXEL*(THREADS_PER_CTA/warpSize)*ELEMENTS_PER_LDG]; // TODO: warpSize
+    __shared__ float smem[THREADS_PER_PIXEL*(THREADS_PER_CTA/warpSize)*ELEMENTS_PER_LDG];
 
     // Compute the NHW coordinate of the thread in the CTA.
     const int thread_in_cta_nhw = threadIdx.x / THREADS_PER_PIXEL;
@@ -1431,11 +1411,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-#ifdef __HIP_PLATFORM_HCC__
-                        bool rectified = __hle(__float2half(x_math[j]), zero_h);
-#else
                         bool rectified = x_math[j] < 0;
-#endif
                         bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             // Thread 0 remembers the relu_mask from the first time through this
@@ -1502,11 +1478,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
 #endif
                     #pragma unroll
                     for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
-#ifdef __HIP_PLATFORM_HCC__
-                        bool rectified = __hle(__float2half(x_math[j]), zero_h);
-#else
                         bool rectified = x_math[j] < 0;
-#endif
                         bitmask_t local_relu_mask = ballot(rectified);
                         if (lane_id == j) {
                             relu_mask = local_relu_mask;
