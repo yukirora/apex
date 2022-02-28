@@ -25,7 +25,6 @@
 */
 #ifndef MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_KERNEL_H_
 #define MXNET_OPERATOR_NN_CUDNN_NHWC_BATCH_NORM_KERNEL_H_
-
 #ifdef __HIP_PLATFORM_HCC__
 #include <hip/hip_runtime.h>
 #include <hip/hip_runtime_api.h>
@@ -98,11 +97,9 @@ struct PackedStorage<uint16_t, ELEMENTS_PER_LDG> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template< int N >
 DEVICE_FUNCTION void from_float(int (&dst)[N], const float (&src)[2*N]) {
-    // Convert from two f32s to two f16s (mantissa LSB rounds to nearest even)
-    // (From 64-bit to 32-bit)
-    half *dst_ = (half *) dst;
     #pragma unroll
     for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
@@ -126,7 +123,6 @@ DEVICE_FUNCTION void from_float(float (&dst)[N], const float (&src)[N]) {
 
 template< int N >
 DEVICE_FUNCTION void to_float(float (&dst)[2*N], int (&src)[N]) {
-    // Convert from two f16s to two f32s (From 32-bit to 64-bit)
     #pragma unroll
     for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
@@ -135,7 +131,6 @@ DEVICE_FUNCTION void to_float(float (&dst)[2*N], int (&src)[N]) {
         asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+1])   : "h"(hi));
     }
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -178,6 +173,7 @@ DEVICE_FUNCTION void ldg_stream(int (&dst)[2], const uint16_t *gmem) {
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template< int N >
@@ -419,11 +415,11 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
                                         const int magic,
                                         const int sync_iters) {
     // The size of a warp.
-#ifdef __HIP_PLATFORM_HCC__
+    #ifdef __HIP_PLATFORM_HCC__
     const int THREADS_PER_WARP = 64;
-#else
+    #else
     const int THREADS_PER_WARP = 32;
-#endif
+    #endif
     // The number of warps in a CTA.
     const int WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of threads per pixel.
@@ -440,9 +436,14 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
     const int lane_id = threadIdx.x % THREADS_PER_WARP;
     // total size of data per sync iter
     const int data_total = MAX_OFFSET*THREADS_PER_PIXEL*ELEMENTS_PER_LDG*2;
+
     #pragma unroll
     for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
-        x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
+        #ifdef __HIP_PLATFORM_HCC__
+        x[i] += shfl_sync(x[i], offset + lane_id);
+        #else
+        x[i] += __shfl_sync(0xffffffffU, x[i], THREADS_PER_PIXEL+lane_id);
+        #endif
     }
 
     // The warp leaders, write to SMEM.
@@ -468,6 +469,7 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
             add(x, y);
         }
 
+        #pragma unroll
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
         }
@@ -479,7 +481,7 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
         if (threadIdx.x < THREADS_PER_PIXEL) {
         // probably could do it earlier, before sync
 
-#ifndef __HIP_PLATFORM_HCC__ // bn_group > 1 is not enabled on HIP
+        // TODO: (bn_group > 1 is not enabled on HIP)
         for (int sync_iter=0; sync_iter < sync_iters; ++sync_iter) {
             //float* params_pair_data = (reinterpret_cast<float**>(params_pair_datas))[sync_iter];
             void* params_pair_data = params_pair_datas[sync_iter];
@@ -522,7 +524,6 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
 
             add(x, other);
         }
-#endif
         // finally, after syncing up and accounting for partial sums from
         // other GPUs as required, write the result
 
@@ -537,11 +538,11 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
 template< int THREADS_PER_CTA >
 DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
     // The size of a warp.
-#ifdef __HIP_PLATFORM_HCC__
+    #ifdef __HIP_PLATFORM_HCC__
     const int THREADS_PER_WARP = 64;
-#else
+    #else
     const int THREADS_PER_WARP = 32;
-#endif
+    #endif
     // The number of warps in a CTA.
     const int WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of threads per pixel.
@@ -580,8 +581,7 @@ DEVICE_FUNCTION void parallel_sums_8x4(float *smem, float (&x)[4], int nhw) {
             // Compute the updated sum.
             add(x, y);
         }
-        
-        #pragma unroll
+
         for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL+lane_id);
             x[i] += shfl_sync(x[i], THREADS_PER_PIXEL*2+lane_id);
@@ -745,7 +745,6 @@ DEVICE_FUNCTION void inter_block_sync(int* gmem_retired_ctas, int expected_count
             __threadfence();
             asm volatile ("ld.global.cg.b32 %0, [%1];"
                 : "=r"(retired_ctas) : "l"(gmem_retired_ctas));
-
         } while (retired_ctas != 0);
     }
     __syncthreads();
@@ -866,7 +865,7 @@ struct NhwcBatchNormFwdParams {
     // saved mean/var (refer BN API from cudnn doc)
     float *gmem_saved_mean, *gmem_saved_var;
     // ReLU bitmask
-    bitmask_t *gmem_relu_bitmask;
+    unsigned int *gmem_relu_bitmask;
     // The dimensions.
     int nhw, c;
     // factor to scale sum of squared errors to get saved variance.  Must be 1/nhw.
@@ -997,7 +996,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             // We cannot load everything to store persistently, so let's makes sure registers and
             // smem are fully utilized, offset is evenly divisible by 32
             int offset = (pixels_per_iteration * OUTER_LOOPS +
-                          PIXELS_PER_CTA_IN_SMEM * gridDim.x - params.nhw) & ~31;
+                          PIXELS_PER_CTA_IN_SMEM * gridDim.x - params.nhw) & ~31; // og: ~31 Why 32???
             cta_nhw_regs -= offset;
             cta_nhw_smem -= offset;
         }
@@ -1020,15 +1019,11 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     zero_array(x_storage[i]);
                     is_valid[i] = 0.f;
                     if (((unsigned int)idx < (unsigned int)params.nhw) && is_valid_c) {
-#ifndef __HIP_PLATFORM_HCC__
                         if (loop_i == OUTER_LOOPS - 1) {
                             ldg_stream(x_storage[i], &gmem_src[idx*params.c]);
                         } else {
-#endif
                             ldg(x_storage[i], &gmem_src[idx*params.c]);
-#ifndef __HIP_PLATFORM_HCC__
                         }
-#endif
                         is_valid[i] = 1.f;
                     }
                 }
@@ -1153,12 +1148,13 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // Run the parallel sum accross the CTA to get the local sum.
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, m1, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, m1, thread_in_cta_nhw);
+        #endif
         __syncthreads();
 
         // The values in shared memory correspond to the CTA-wide sums.
@@ -1174,13 +1170,13 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // Run the parallel sum accross the CTA to get the local adjusted variance.
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, m2, thread_in_cta_nhw);
-
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, m2, thread_in_cta_nhw);
+        #endif
         // The workspace in global memory is distributed across the different CTA.
         int gmem_sums_offset = c_blk_index*gridDim.x*C_ELEMENTS_PER_CTA*2;
 
@@ -1224,22 +1220,14 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             add(m1, tmp);
         }
 
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0)
         {
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, m1, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+3, params.magic, params.sync_iters);
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, m1, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
         }
-#endif
         __syncthreads();
 
         // The values in shared memory correspond to the CTA-wide sums.
@@ -1289,22 +1277,25 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             }
         }
 
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0)
         {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, m2, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+2, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, m2, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+2, params.magic, params.sync_iters);
+            #endif
+            
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, m2, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, m2, thread_in_cta_nhw);
+            #endif
         }
-#endif
         __syncthreads();
 
         read_from_smem(m2, smem, thread_in_cta_c);
@@ -1351,9 +1342,9 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         // The base pointer to write to.
         uint16_t *const gmem_dst = &params.gmem_dst[thread_c];
 
-        bitmask_t *const gmem_relu_bitmask = params.gmem_relu_bitmask +
+        unsigned int *const gmem_relu_bitmask = params.gmem_relu_bitmask +
 #ifdef __HIP_PLATFORM_HCC__
-                                     ((params.nhw + 3) & ~3) * c_blk_index;
+                                     ((params.nhw + 3) & ~3) * c_blk_index;   // TODO: why 3? (Hubert)
 #else
                                      ((params.nhw + 31) & ~31) * 2 * c_blk_index;
 #endif
@@ -1381,23 +1372,25 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     float x1_math[ELEMENTS_PER_LDG];
                     ldg_stream(x1_math, &gmem_src1[(is_valid ? idx : 0)*params.c]);
                     add(x_math, x1_math);
-                    bitmask_t relu_mask;
-#ifdef __HIP_PLATFORM_HCC__
+                    unsigned int relu_mask;
+                    #ifdef __HIP_PLATFORM_HCC__
                     int lane_id = threadIdx.x & 63;
-#else
+                    #else
                     int lane_id = threadIdx.x & 31;
-#endif
+                    #endif
+
                     #pragma unroll
-                    for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
+                    for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
+                        // bool rectified = x_math[i] < 0.0F;
                         bool rectified = x_math[j] < 0;
                         bitmask_t local_relu_mask = ballot(rectified);
-                        if (lane_id == j) {
+                        if (lane_id == i) {
                             // Thread 0 remembers the relu_mask from the first time through this
                             // loop, Thread 1 the next, Thread 2 the next, and Thread 3 the last.
                             relu_mask = local_relu_mask;
                         }
                         if (rectified) {
-                            x_math[j] = 0.0F;
+                            x_math[i] = 0.0F;
                         }
                     }
                     if (is_valid_nhw && (lane_id < ELEMENTS_PER_LDG)) {
@@ -1448,21 +1441,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                     float x1_math[ELEMENTS_PER_LDG];
                     ldg_stream(x1_math, &gmem_src1[(is_valid ? idx : 0)*params.c]);
                     add(x_math, x1_math);
-                    bitmask_t relu_mask;
-#ifdef __HIP_PLATFORM_HCC__
+                    unsigned int relu_mask;
+                    #ifdef __HIP_PLATFORM_HCC__
                     int lane_id = threadIdx.x & 63;
-#else
+                    #else
                     int lane_id = threadIdx.x & 31;
-#endif
+                    #endif
                     #pragma unroll
-                    for (int j = 0; j < ELEMENTS_PER_LDG; ++j) {
+                    for (int i = 0; i < ELEMENTS_PER_LDG; ++i) {
+                        // bool rectified = x_math[i] < 0.0F;
                         bool rectified = x_math[j] < 0;
                         bitmask_t local_relu_mask = ballot(rectified);
-                        if (lane_id == j) {
+                        // unsigned int local_relu_mask = __ballot_sync(0xFFFFFFFFU, rectified); ///// TODO (Hubert)
+                        if (lane_id == i) {
                             relu_mask = local_relu_mask;
                         }
                         if (rectified) {
-                            x_math[j] = 0.0F;
+                            x_math[i] = 0.0F;
                         }
                     }
                     if (is_valid_nhw && (lane_id < ELEMENTS_PER_LDG)) {
@@ -1495,7 +1490,7 @@ struct NhwcBatchNormBwdParams {
     // The mean/inv-var saved from fwd pass
     float *gmem_saved_mean, *gmem_saved_var;
     // ReLU bitmask
-    bitmask_t *gmem_relu_bitmask;
+    unsigned int *gmem_relu_bitmask;
     // The dimensions.
     int nhw, c;
     // factor to scale sum of squared errors to get saved variance.  Must be 1/nhw.
@@ -1791,24 +1786,26 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, dscale, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, dscale, thread_in_cta_nhw);
+        #endif
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, dbias, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, dbias, thread_in_cta_nhw);
+        #endif
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dbias, smem, thread_in_cta_c);
@@ -1848,21 +1845,24 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #endif
+
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -1870,21 +1870,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #endif
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2205,23 +2207,24 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, dscale, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, dscale, thread_in_cta_nhw);
+        #endif
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
+        #else
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
+        #endif
             smem, dbias, thread_in_cta_nhw);
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2262,21 +2265,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #endif
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2284,21 +2289,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #endif
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2496,12 +2503,12 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             // We cannot load everything to store persistently, so let's makes sure registers and
             // smem are fully utilized, offset is evenly divisible by 32
             int offset = (pixels_per_iteration * OUTER_LOOPS + PIXELS_PER_CTA_IN_SMEM * gridDim.x -
-                          params.nhw) & ~31;
+                          params.nhw) & ~31;  // og: ~31 TODO: why 31? (Hubert)
             cta_nhw_regs -= offset;
             cta_nhw_smem -= offset;
         }
 
-        const bitmask_t *const gmem_relu_bitmask = params.gmem_relu_bitmask +
+        const unsigned int *const gmem_relu_bitmask = params.gmem_relu_bitmask +
 #ifdef __HIP_PLATFORM_HCC__
                                       ((params.nhw + 3) & ~3) * c_blk_index;
 #else
@@ -2521,9 +2528,10 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
             int lane_id = threadIdx.x & 31;
 #endif
 
+
             // Read the elements from memory.
             float is_valid[PIXELS_PER_THREAD_IN_REGISTERS];
-            bitmask_t relu_mask[PIXELS_PER_THREAD_IN_REGISTERS];
+            unsigned int relu_mask[PIXELS_PER_THREAD_IN_REGISTERS];
             #pragma unroll
             for (int i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i) {
                 const int idx = nhw_regs + thread_in_cta_nhw + i*PIXELS_PER_LDG;
@@ -2600,7 +2608,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                 const bool is_pixel_valid = is_pixel_valid_nhw && is_valid_c;
                 PackedStorageType x_storage_local[PACKED_ELEMENTS_PER_LDG],
                                   dy_storage_local[PACKED_ELEMENTS_PER_LDG];
-                bitmask_t relu_mask;
+                unsigned int relu_mask;
 #ifdef __HIP_PLATFORM_HCC__
                 int lane_id = threadIdx.x & 63;
 #else
@@ -2659,24 +2667,26 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, dscale, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, dscale, thread_in_cta_nhw);
+        #endif
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dscale, smem, thread_in_cta_c);
         __syncthreads();
 
         // dbias parallel sum
-#ifdef __HIP_PLATFORM_HCC__
+        #ifdef __HIP_PLATFORM_HCC__
         ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
             smem, dbias, thread_in_cta_nhw);
+        #else
+        ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+            smem, dbias, thread_in_cta_nhw);
+        #endif
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
         read_from_smem(dbias, smem, thread_in_cta_c);
@@ -2716,21 +2726,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         }
 
         // dscale parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dscale, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+1, params.magic, params.sync_iters);
+            #endif
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dscale, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dscale, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
@@ -2738,21 +2750,23 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
         __syncthreads();
 
         // dbias parallel sum
-#ifndef __HIP_PLATFORM_HCC__
         if (params.sync_iters>0) {
+            #ifdef __HIP_PLATFORM_HCC__
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatchX<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #else
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatchX<THREADS_PER_CTA>(
                 smem, dbias, thread_in_cta_nhw, params.my_data, params.pair_datas, 4*c_blk_index+0, params.magic, params.sync_iters);
+            #endif
         } else {
-#endif
-#ifdef __HIP_PLATFORM_HCC__
+            #ifdef __HIP_PLATFORM_HCC__
             ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::template dispatch<THREADS_PER_CTA>(
-#else
-            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-#endif
                 smem, dbias, thread_in_cta_nhw);
-#ifndef __HIP_PLATFORM_HCC__
+            #else
+            ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
+                smem, dbias, thread_in_cta_nhw);
+            #endif
         }
-#endif
 
         __syncthreads();
         // The values in shared memory correspond to the CTA-wide sums.
