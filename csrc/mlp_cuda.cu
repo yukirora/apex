@@ -72,6 +72,10 @@ cublasStatus_t mlp_gemm(
     double* C,
     int ldc) {
 #ifdef __HIP_PLATFORM_HCC__
+  int flag = 0;
+  #if USE_GEMM_FLAGS_FP16_ALT_IMPL
+    flag = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+  #endif
   return rocblas_gemm_ex(
       handle,
       transa,
@@ -96,7 +100,7 @@ cublasStatus_t mlp_gemm(
       rocblas_datatype_f64_r,
       rocblas_gemm_algo_standard,
       0,
-      0);  
+      flag);
 #else
   return cublasGemmEx(
       handle,
@@ -138,6 +142,10 @@ cublasStatus_t mlp_gemm(
     float* C,
     int ldc) {
 #ifdef __HIP_PLATFORM_HCC__
+  int flag = 0;
+  #if USE_GEMM_FLAGS_FP16_ALT_IMPL
+    flag = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+  #endif
   return rocblas_gemm_ex(
       handle,
       transa,
@@ -162,7 +170,7 @@ cublasStatus_t mlp_gemm(
       rocblas_datatype_f32_r,
       rocblas_gemm_algo_standard,
       0,
-      0);
+      flag);
 
 #else
   return cublasGemmEx(
@@ -205,6 +213,10 @@ cublasStatus_t mlp_gemm(
     at::Half* C,
     int ldc) {
 #ifdef __HIP_PLATFORM_HCC__
+  int flag = 0;
+  #if USE_GEMM_FLAGS_FP16_ALT_IMPL
+    flag = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+  #endif
   return rocblas_gemm_ex(
       handle,
       transa,
@@ -229,7 +241,7 @@ cublasStatus_t mlp_gemm(
       rocblas_datatype_f32_r,
       rocblas_gemm_algo_standard,
       0,
-      0);
+      flag);
 #else
   return cublasGemmEx(
       handle,
