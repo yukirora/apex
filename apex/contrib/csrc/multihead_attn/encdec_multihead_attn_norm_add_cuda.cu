@@ -16,6 +16,11 @@
 #include "softmax.h"
 #include "strided_batched_gemm.h"
 
+#ifdef __HIP_PLATFORM_HCC__
+  #define PYTORCH_ROCBLAS_VERSION_DECIMAL (ROCBLAS_VERSION_MAJOR * 100 + ROCBLAS_VERSION_MINOR)
+  #define USE_GEMM_FLAGS_FP16_ALT_IMPL (PYTORCH_ROCBLAS_VERSION_DECIMAL >= 242)
+#endif
+
 namespace multihead_attn {
 namespace encdec_norm_add {
 namespace rocblas_gemmex {
