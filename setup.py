@@ -232,15 +232,18 @@ if "--cuda_ext" in sys.argv:
                                               'nvcc': nvcc_args_layer_norm if not IS_ROCM_PYTORCH else hipcc_args_layer_norm}))
 
         print ("INFO: Building the MLP Extension.")
-        if os.path.exists(os.path.join(torch_dir, "include", "ATen", "Context.h")):
-            context_file = os.path.join(torch_dir, "include", "ATen", "Context.h")
+        context_file = os.path.join(torch_dir, "include", "ATen", "Context.h")
+        if os.path.exists(context_file):
+            lines = open(context_file, 'r').readlines()
             found = False
-            for line in context_file:
+            for line in lines:
                 if "BackwardPassGuard" in line:
                     found = True
                     break
             if found:
                 os.environ['ROCM_BACKWARD_PASS_GUARD'] = "1"
+            else:
+                os.environ['ROCM_BACKWARD_PASS_GUARD'] = "0"
         ext_modules.append(
             CUDAExtension(name='mlp_cuda',
                           sources=['csrc/mlp.cpp',
