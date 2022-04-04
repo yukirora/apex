@@ -9,6 +9,7 @@ import os
 
 # ninja build does not work unless include_dirs are abs path
 this_dir = os.path.dirname(os.path.abspath(__file__))
+torch_dir = torch.__path__[0]
 
 def get_cuda_bare_metal_version(cuda_dir):
     raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
@@ -231,6 +232,15 @@ if "--cuda_ext" in sys.argv:
                                               'nvcc': nvcc_args_layer_norm if not IS_ROCM_PYTORCH else hipcc_args_layer_norm}))
 
         print ("INFO: Building the MLP Extension.")
+        if os.path.exists(os.path.join(torch_dir, "include", "ATen", "Context.h")):
+            context_file = os.path.join(torch_dir, "include", "ATen", "Context.h")
+            found = False
+            for line in context_file:
+                if "BackwardPassGuard" in line:
+                    found = True
+                    break
+            if found:
+                os.environ['ROCM_BACKWARD_PASS_GUARD'] = "1"
         ext_modules.append(
             CUDAExtension(name='mlp_cuda',
                           sources=['csrc/mlp.cpp',
@@ -365,7 +375,6 @@ if "--deprecated_fused_lamb" in sys.argv or "--cuda_ext" in sys.argv:
 # Check, if ATen/CUDAGeneratorImpl.h is found, otherwise use ATen/cuda/CUDAGeneratorImpl.h
 # See https://github.com/pytorch/pytorch/pull/70650
 generator_flag = []
-torch_dir = torch.__path__[0]
 if os.path.exists(os.path.join(torch_dir, "include", "ATen", "cuda", "CUDAGeneratorImpl.h")):
     generator_flag = ["-DNEW_GENERATOR_PATH"]
 
