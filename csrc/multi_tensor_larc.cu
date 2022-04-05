@@ -15,7 +15,7 @@ struct LARCFunctor
    __device__ __forceinline__ void operator()(
     int chunk_size,
     volatile int* noop_gmem,
-    TensorListMetadata<2>* tl,
+    TensorListMetadata<2>& tl,
     float *grad_norms,
     float *param_norms,
     const float lr,
@@ -23,20 +23,20 @@ struct LARCFunctor
     const float epsilon,
     const float weight_decay,
     const bool clip) {
-    int tensor_loc = tl->block_to_tensor[blockIdx.x];
+    int tensor_loc = tl.block_to_tensor[blockIdx.x];
 
-    int chunk_idx = tl->block_to_chunk[blockIdx.x];
-    int n = tl->sizes[tensor_loc];
+    int chunk_idx = tl.block_to_chunk[blockIdx.x];
+    int n = tl.sizes[tensor_loc];
     n -= chunk_idx * chunk_size;
     n = min(n, chunk_size);
 
-    T_grad* g = (T_grad*) tl->addresses[0][tensor_loc];
+    T_grad* g = (T_grad*) tl.addresses[0][tensor_loc];
     g += chunk_idx * chunk_size;
 
-    T_weight* p = (T_weight*) tl->addresses[1][tensor_loc];
+    T_weight* p = (T_weight*) tl.addresses[1][tensor_loc];
     p += chunk_idx * chunk_size;
 
-    int tensor_offset = tl->start_tensor_this_launch + tensor_loc;
+    int tensor_offset = tl.start_tensor_this_launch + tensor_loc;
     float g_norm = grad_norms[tensor_offset];
     float p_norm = param_norms[tensor_offset];
 
