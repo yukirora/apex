@@ -10,7 +10,7 @@
 //#include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <ATen/cuda/Exceptions.h>
-
+#include <rocm_gemm.h>
 //#include "cutlass/cutlass.h"
 //#include "cutlass/gemm/gemm.h"
 //#include "cutlass/gemm/wmma_gemm_traits.h"
@@ -53,11 +53,13 @@ void RocblasStridedBatchedGemm(char transa, char transb, long m, long n, long k,
     float fAlpha = alpha;
     float fBeta = beta;
     //THCublasCheck(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
-    TORCH_CUDABLAS_CHECK(rocblas_gemm_strided_batched_ex(
-      handle, opa, opb, (int)m, (int)n, (int)k, (void*)&fAlpha, a, rocblas_datatype_f16_r, 
-      (int)lda, strideA, b, rocblas_datatype_f16_r, (int)ldb, strideB, (void*)&fBeta, c, rocblas_datatype_f16_r, (int)ldc, strideC, 
-      d, rocblas_datatype_f16_r, int(ldd), strideD,
-      (int)batchCount, rocblas_datatype_f32_r, algo, 0, 0)); // flags (rocblas_gemm_flags_fp16_alt_impl)
+    TORCH_CUDABLAS_CHECK(rocblas_gemm_strided_batched_ex(handle,
+                                     opa, opb, (int)m, (int)n, (int)k,
+                                     (void*)&fAlpha, a, a_type, (int)lda, strideA,
+                                     b, b_type, (int)ldb, strideB,
+                                     (void*)&fBeta, c, c_type, (int)ldc, strideC,
+                                     d, d_type, int(ldd), strideD,
+                                     (int)batchCount, compute_type, algo, solution_index, flags));
 }
 } // namespace
 namespace {
