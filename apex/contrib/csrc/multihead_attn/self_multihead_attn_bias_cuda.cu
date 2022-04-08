@@ -79,6 +79,7 @@ fwd_cuda(bool use_time_mask, bool is_training, int heads,
   char b_layout_n{'n'};
 
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
+
   // Input Linear Fwd
   input_lin_results.copy_(input_biases);
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -126,7 +127,8 @@ fwd_cuda(bool use_time_mask, bool is_training, int heads,
                              static_cast<half*>(softmax_results_ptr), 
                              k_seq_len, 
                              k_seq_len*q_seq_len, 
-                             attn_batches); // flags
+                             attn_batches,
+                             flags);
   
   // Padded Softmax
   bool softmax_success = false;
@@ -179,7 +181,8 @@ fwd_cuda(bool use_time_mask, bool is_training, int heads,
                              static_cast<half*>(matmul2_results.data_ptr()), 
                              head_dim*attn_batches, 
                              head_dim, 
-                             attn_batches); // flags
+                             attn_batches,
+                             flags);
 
   outputs.copy_(output_biases);
 
@@ -269,6 +272,15 @@ std::vector<torch::Tensor> bwd_cuda(
   char b_layout_t{'t'};
 
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
+  #ifdef __HIP_PLATFORM_HCC__
+    #define PYTORCH_ROCBLAS_VERSION_DECIMAL (ROCBLAS_VERSION_MAJOR * 100 + ROCBLAS_VERSION_MINOR)
+    #define USE_GEMM_FLAGS_FP16_ALT_IMPL (PYTORCH_ROCBLAS_VERSION_DECIMAL >= 242)
+    #if USE_GEMM_FLAGS_FP16_ALT_IMPL
+      #ifdef ROCM_BACKWARD_PASS_GUARD
+        flags = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+      #endif
+    #endif
+  #endif
 
   // Output Linear Dgrad
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
@@ -343,7 +355,8 @@ std::vector<torch::Tensor> bwd_cuda(
                              static_cast<half*>(matmul2_grads.data_ptr()),
                              k_seq_len, 
                              k_seq_len*q_seq_len,
-                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
+                             attn_batches,
+                             flags);
 
   // Matmul2 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -365,7 +378,8 @@ std::vector<torch::Tensor> bwd_cuda(
                              v_lin_grads_ptr, 
                              lead_dim, 
                              batch_stride, 
-                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
+                             attn_batches,
+                             flags);
 
   // Apply Dropout Mask and Scale by Dropout Probability 
   // Softmax Grad
@@ -396,8 +410,9 @@ std::vector<torch::Tensor> bwd_cuda(
                              batch_stride,  
                              q_lin_grads_ptr, 
                              lead_dim, 
-                             batch_stride,
-                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
+                             batch_stride, 
+                             attn_batches,
+                             flags);
 
   // Matmul1 Dgrad2
   gemm_switch_fp32accum(     a_layout_n, 
@@ -419,7 +434,8 @@ std::vector<torch::Tensor> bwd_cuda(
                              k_lin_grads_ptr, 
                              lead_dim, 
                              batch_stride, 
-                             attn_batches); // rocblas_gemm_flags_fp16_alt_impl
+                             attn_batches,
+                             flags);
   // Input Linear Dgrad  
   TORCH_CUDABLAS_CHECK(rocblas_gemm_ex(handle,
                              CUBLAS_OP_N, 

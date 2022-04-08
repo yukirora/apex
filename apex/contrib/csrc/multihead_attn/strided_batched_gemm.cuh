@@ -41,11 +41,9 @@ cublasOperation_t convertTransToCublasOperation(char trans) {
   }
 }
 
-void RocblasStridedBatchedGemm(
-    char transa, char transb, long m, long n, long k,
-    float alpha, const half *a, long lda, long strideA, const half *b, long ldb, 
-    long strideB, float beta, half *c, long ldc, long strideC, half *d, long ldd, long strideD, long batchCount, 
-    rocblas_gemm_algo algo = rocblas_gemm_algo_standard) {
+void RocblasStridedBatchedGemm(char transa, char transb, long m, long n, long k,
+                    float alpha, const half *a, long lda, long strideA, const half *b, long ldb, long strideB,
+                    float beta, half *c, long ldc, long strideC, half *d, long ldd, long strideD, long batchCount, rocblas_gemm_algo algo, rocblas_int flags) {
     cublasOperation_t opa = convertTransToCublasOperation(transa);
     cublasOperation_t opb = convertTransToCublasOperation(transb);
 
@@ -65,17 +63,17 @@ void RocblasStridedBatchedGemm(
 namespace {
 void gemm_switch_fp32accum(char transa, char transb, long m, long n, long k,
                            float alpha, const half *a, long lda, long strideA, const half *b, long ldb, long strideB,
-                           float beta, half *c, long ldc, long strideC, half *d, long ldd, long strideD, long batchCount) {
+                           float beta, half *c, long ldc, long strideC, half *d, long ldd, long strideD, long batchCount, rocblas_int flags) {
   auto stream = c10::cuda::getCurrentCUDAStream();
   if        ( (transa == 't') && (transb == 'n') ) { 
-    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
-    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
+    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
+    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
   } else if ( (transa == 'n') && (transb == 'n') ) {
-    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
-    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
+    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
+    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
   } else if ( (transa == 'n') && (transb == 't') ) {
-    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) {RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
-    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, rocblas_gemm_algo_standard); }
+    if      (!(lda & 0x7) && !(ldb & 0x7) && !(ldc & 0x7)) {RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
+    else                                                   { RocblasStridedBatchedGemm(transa, transb, m, n, k, alpha, a, lda, strideA, b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, algo, flags); }
   } else {
     AT_ASSERTM(false, "TransA and TransB are invalid");
   }
@@ -129,7 +127,7 @@ void HgemmStridedBatched(char transa, char transb, long m,
   // gemm_switch_fp32accum(transa, transb, m, n, k, alpha, a, lda, strideA,
   //                       b, ldb, strideB, beta, c, ldc, strideC, batchCount);
   gemm_switch_fp32accum(transa, transb, m, n, k, alpha, a, lda, strideA, 
-                        b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount);
+                        b, ldb, strideB, beta, c, ldc, strideC, d, ldd, strideD, batchCount, flags);
 }
 
 } // namespace
