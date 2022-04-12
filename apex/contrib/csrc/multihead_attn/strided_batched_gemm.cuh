@@ -17,9 +17,9 @@
 
 // symbol to be automatically resolved by PyTorch libs
 /*
-rocblas_datatype a_type       = rocblas_datatype_f16_r; // OK
-rocblas_datatype b_type       = rocblas_datatype_f16_r; // OK
-rocblas_datatype c_type       = rocblas_datatype_f16_r; // OK
+rocblas_datatype a_type       = rocblas_datatype_f16_r;
+rocblas_datatype b_type       = rocblas_datatype_f16_r;
+rocblas_datatype c_type       = rocblas_datatype_f16_r;
 rocblas_datatype d_type       = rocblas_datatype_f16_r;
 rocblas_datatype compute_type       = rocblas_datatype_f32_r;
 

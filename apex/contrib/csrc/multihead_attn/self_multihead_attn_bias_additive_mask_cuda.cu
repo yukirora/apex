@@ -19,36 +19,30 @@ namespace multihead_attn {
 namespace self_bias_additive_mask {
 namespace rocblas_gemmex {
 
-std::vector<torch::Tensor> fwd_cuda(
-                               bool                 use_time_mask,
-							   bool                 is_training,
-                               int                  heads,
-                               torch::Tensor const& inputs, 
-                               torch::Tensor const& input_weights,
-                               torch::Tensor const& output_weights,
-                               torch::Tensor const& input_biases,
-                               torch::Tensor const& output_biases,
-                               const half*       pad_mask,
-                               float                dropout_prob
-                                   ) 
-{
-  const int   embed_dim      = inputs.size(2);
-  const int   sequences      = inputs.size(1);
-  const int   q_seq_len      = inputs.size(0);
-  const int   k_seq_len      = q_seq_len;
-  const int   batches        = sequences * q_seq_len;
-  const int   head_dim       = embed_dim / heads;
-  const int   output_lin_dim = 3 * embed_dim;
-  const int   attn_batches   = heads * sequences;
-  const int   lead_dim       = attn_batches * 3 * head_dim;
-  const int   batch_stride   = 3 * head_dim;
-  const int   dropout_elems  = attn_batches * q_seq_len * k_seq_len;
-  const float alpha          = 1.0;
-  const float beta_zero      = 0.0;
-  const float beta_one       = 1.0;
-  const float scale          = 1.0 / sqrt(static_cast<float>(head_dim));
+std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
+                                    int heads, torch::Tensor const &inputs,
+                                    torch::Tensor const &input_weights,
+                                    torch::Tensor const &output_weights,
+                                    torch::Tensor const &input_biases,
+                                    torch::Tensor const &output_biases,
+                                    const half *pad_mask, float dropout_prob) {
+  const int embed_dim = inputs.size(2);
+  const int sequences = inputs.size(1);
+  const int q_seq_len = inputs.size(0);
+  const int k_seq_len = q_seq_len;
+  const int batches = sequences * q_seq_len;
+  const int head_dim = embed_dim / heads;
+  const int output_lin_dim = 3 * embed_dim;
+  const int attn_batches = heads * sequences;
+  const int lead_dim = attn_batches * 3 * head_dim;
+  const int batch_stride = 3 * head_dim;
+  const int dropout_elems = attn_batches * q_seq_len * k_seq_len;
+  const float alpha = 1.0;
+  const float beta_zero = 0.0;
+  const float beta_one = 1.0;
+  const float scale = 1.0 / sqrt(static_cast<float>(head_dim));
 
-  // There is no reason to use more than one stream as every kernel is 
+  // There is no reason to use more than one stream as every kernel is
   // sequentially dependent
   cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();

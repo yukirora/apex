@@ -20,42 +20,37 @@ namespace multihead_attn {
 namespace encdec_norm_add {
 namespace rocblas_gemmex {
 
-std::vector<torch::Tensor> fwd_cuda(
-                               bool                 use_time_mask,
-                               bool                 is_training,
-                               int                  heads,
-                               torch::Tensor const& inputs_q, 
-                               torch::Tensor const& inputs_kv, 
-                               torch::Tensor const& lyr_nrm_gamma_weights,
-                               torch::Tensor const& lyr_nrm_beta_weights,
-                               torch::Tensor const& input_weights_q,
-                               torch::Tensor const& input_weights_kv,
-                               torch::Tensor const& output_weights,
-                               const uint8_t*       pad_mask,
-                               float                dropout_prob
-                                   ) 
-{
-  const int   embed_dim         = inputs_q.size(2);
-  const int   sequences         = inputs_q.size(1);
-  const int   q_seq_len         = inputs_q.size(0);
-  const int   k_seq_len         = inputs_kv.size(0);
-  const int   batches_q         = sequences * q_seq_len;
-  const int   batches_kv        = sequences * k_seq_len;
-  const int   total_tokens_q    = batches_q * embed_dim;
-  const int   head_dim          = embed_dim / heads;
-  const int   output_lin_q_dim  = embed_dim;
-  const int   output_lin_kv_dim = 2 * embed_dim;
-  const int   attn_batches      = heads * sequences;
-  const int   lead_dim_q        = attn_batches * head_dim;
-  const int   lead_dim_kv       = attn_batches * 2 *head_dim;
-  const int   batch_stride_q    = head_dim;
-  const int   batch_stride_kv   = 2 * head_dim;
-  const int   dropout_elems     = attn_batches * q_seq_len * k_seq_len;
-  const float alpha             = 1.0;
-  const float beta              = 0.0;
-  const float scale             = 1.0 / sqrt(static_cast<float>(head_dim));
- 
-  // There is no reason to use more than one stream as every kernel is 
+std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
+                                    int heads, torch::Tensor const &inputs_q,
+                                    torch::Tensor const &inputs_kv,
+                                    torch::Tensor const &lyr_nrm_gamma_weights,
+                                    torch::Tensor const &lyr_nrm_beta_weights,
+                                    torch::Tensor const &input_weights_q,
+                                    torch::Tensor const &input_weights_kv,
+                                    torch::Tensor const &output_weights,
+                                    const uint8_t *pad_mask,
+                                    float dropout_prob) {
+  const int embed_dim = inputs_q.size(2);
+  const int sequences = inputs_q.size(1);
+  const int q_seq_len = inputs_q.size(0);
+  const int k_seq_len = inputs_kv.size(0);
+  const int batches_q = sequences * q_seq_len;
+  const int batches_kv = sequences * k_seq_len;
+  const int total_tokens_q = batches_q * embed_dim;
+  const int head_dim = embed_dim / heads;
+  const int output_lin_q_dim = embed_dim;
+  const int output_lin_kv_dim = 2 * embed_dim;
+  const int attn_batches = heads * sequences;
+  const int lead_dim_q = attn_batches * head_dim;
+  const int lead_dim_kv = attn_batches * 2 * head_dim;
+  const int batch_stride_q = head_dim;
+  const int batch_stride_kv = 2 * head_dim;
+  const int dropout_elems = attn_batches * q_seq_len * k_seq_len;
+  const float alpha = 1.0;
+  const float beta = 0.0;
+  const float scale = 1.0 / sqrt(static_cast<float>(head_dim));
+
+  // There is no reason to use more than one stream as every kernel is
   // sequentially dependent
   cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();

@@ -26,7 +26,7 @@ from . import testing
 from . import transformer
 
 
-# Logging utilities mainly for apex.transformer module
+# Logging utilities for apex.transformer module
 class RankInfoFormatter(logging.Formatter):
 
     def format(self, record):
@@ -37,6 +37,6 @@ class RankInfoFormatter(logging.Formatter):
 
 _library_root_logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
-handler.setFormatter(RankInfoFormatter("%(asctime)s - %(name)s - %(levelname)s - %(rank_info)s - %(message)s"))
+handler.setFormatter(RankInfoFormatter("%(asctime)s - PID:%(process)d - rank:%(rank_info)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s", "%y-%m-%d %H:%M:%S"))
 _library_root_logger.addHandler(handler)
 _library_root_logger.propagate = False
