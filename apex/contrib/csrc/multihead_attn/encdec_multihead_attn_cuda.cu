@@ -85,7 +85,7 @@ std::vector<torch::Tensor> fwd_cuda(bool use_time_mask, bool is_training,
   char a_layout_n{'n'};
   char b_layout_n{'n'};
 
-  rocblas_int flags = 0
+  rocblas_int flags = 0;
 
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
 
@@ -318,7 +318,7 @@ std::vector<torch::Tensor> bwd_cuda(
   char b_layout_n{'n'};
   char b_layout_t{'t'}; 
   
-  rocblas_int flags = 0
+  rocblas_int flags = 0;
 
   //TORCH_CUDABLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
   #ifdef __HIP_PLATFORM_HCC__

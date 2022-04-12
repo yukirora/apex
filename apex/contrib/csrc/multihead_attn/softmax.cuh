@@ -1,5 +1,5 @@
 #pragma once
-#include "philox.h"
+#include "philox.cuh"
 #include <ATen/cuda/CUDAGraphsUtils.cuh>
 #include <curand_kernel.h>
 
@@ -3144,8 +3144,4 @@ bool dispatch_masked_softmax_backward(output_t *grad_input, const input_t *grad,
   }
   return false;
 }
-<<<<<<< HEAD:apex/contrib/csrc/multihead_attn/softmax.h
-
-=======
 } // namespace
->>>>>>> 7ec8ed6 (Faster `--fast_multihead_attn` build (#1245)):apex/contrib/csrc/multihead_attn/softmax.cuh
