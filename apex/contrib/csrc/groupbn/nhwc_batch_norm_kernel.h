@@ -103,19 +103,21 @@ template< int N >
 DEVICE_FUNCTION void from_float(int (&dst)[N], const float (&src)[2*N]) {
     // Convert from two f32s to two f16s (mantissa LSB rounds to nearest even)
     // (From 64-bit to 32-bit)
-    half *dst_ = (half *) dst;
+#ifdef __HIP_PLATFORM_HCC__
+    half2 *dst_ = reinterpret_cast<half2*>(dst);
     #pragma unroll
     for (int i = 0; i < N; ++i) {
-#ifdef __HIP_PLATFORM_HCC__
-        dst_[2*i] = __float2half(src[2*i]);
-        dst_[2*i+1] = __float2half(src[2*i+1]);
+        dst_[2*i] = __floats2half2_rn(src[2*i], src[2*i + 1]);
+    }
 #else
+    #pragma unroll
+    for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
         asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(lo) : "f"(src[2*i+0]));
         asm volatile("cvt.rn.f16.f32 %0, %1;" : "=h"(hi) : "f"(src[2*i+1]));
         asm volatile("mov.b32 %0, {%1, %2};"  : "=r"(dst[i]) : "h"(lo), "h"(hi));
-#endif
     }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -133,19 +135,22 @@ DEVICE_FUNCTION void from_float(float (&dst)[N], const float (&src)[N]) {
 template< int N >
 DEVICE_FUNCTION void to_float(float (&dst)[2*N], int (&src)[N]) {
     // Convert from two f16s to two f32s (From 32-bit to 64-bit)
+#ifdef __HIP_PLATFORM_HCC__
     #pragma unroll
     for (int i = 0; i < N; ++i) {
-#ifdef __HIP_PLATFORM_HCC__
-        half *src_ = (half *) src;
-        dst[2*i] = __half2float(src_[2*i]);
+        half *src_ = reinterpret_cast<half *>(src);
+        dst[2*i  ] = __half2float(src_[2*i  ]);
         dst[2*i+1] = __half2float(src_[2*i+1]);
+    }
 #else
+    #pragma unroll
+    for (int i = 0; i < N; ++i) {
         uint16_t lo, hi;
         asm volatile("mov.b32 {%0, %1}, %2;" : "=h"(lo), "=h"(hi) : "r"(src[i]));
         asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+0])   : "h"(lo));
         asm volatile("cvt.f32.f16 %0, %1;"   : "=f"(dst[2*i+1])   : "h"(hi));
-#endif
     }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,14 +166,15 @@ DEVICE_FUNCTION void to_float(float (&dst)[N], float (&src)[N]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void ldg(int (&dst)[1], const uint16_t *gmem) {
-    dst[0] = __ldg((const int*) gmem);
+    dst[0] = __ldg(reinterpret_cast<const int*>(gmem));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//TODO: explore non temporal loads here -- ensure enough reg space -- alignment needed
 DEVICE_FUNCTION void ldg_stream(int (&dst)[1], const uint16_t *gmem) {
 #ifdef __HIP_PLATFORM_HCC__
-    dst[0] = __ldg((const int*) gmem);
+    dst[0] = __ldg(reinterpret_cast<const int*>(gmem));
 #else
     unsigned int tmp;
     asm volatile ("ld.global.cs.nc.s32 %0, [%1];"  : "=r"(tmp) : "l" ((const uint *)gmem));
@@ -179,16 +185,17 @@ DEVICE_FUNCTION void ldg_stream(int (&dst)[1], const uint16_t *gmem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void ldg(int (&dst)[2], const uint16_t *gmem) {
-    int2 tmp = __ldg((const int2*) gmem);
+    int2 tmp = __ldg(reinterpret_cast<const int2*>(gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//TODO: explore non temporal loads here -- ensure enough reg space -- alignment needed
 DEVICE_FUNCTION void ldg_stream(int (&dst)[2], const uint16_t *gmem) {
 #ifdef __HIP_PLATFORM_HCC__
-    int2 tmp = __ldg((const int2*) gmem);
+    int2 tmp = __ldg(reinterpret_cast<const int2*>(gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 #else
@@ -199,6 +206,38 @@ DEVICE_FUNCTION void ldg_stream(int (&dst)[2], const uint16_t *gmem) {
     dst[1] = tmp.y;
 #endif
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef __HIP_PLATFORM_HCC__
+DEVICE_FUNCTION void ldg(int (&dst)[4], const uint16_t *gmem) {
+    int4 tmp = __ldg(reinterpret_cast<const int4*>(gmem));
+    dst[0] = tmp.x;
+    dst[1] = tmp.y;
+    dst[2] = tmp.z;
+    dst[3] = tmp.w;
+}
+
+DEVICE_FUNCTION void ldg_stream(int (&dst)[4], const uint16_t *gmem) {
+    int4 tmp = __ldg(reinterpret_cast<const int4*>(gmem));
+    dst[0] = tmp.x;
+    dst[1] = tmp.y;
+    dst[2] = tmp.z;
+    dst[3] = tmp.w;
+}
+
+DEVICE_FUNCTION void ldg_stream(int (&dst)[8], const uint16_t *gmem) {
+    int4 tmp1 = __ldg(reinterpret_cast<const int4*>(gmem));
+    int4 tmp2 = __ldg(reinterpret_cast<const int4*>(&gmem[8]));
+    dst[0] = tmp1.x;
+    dst[1] = tmp1.y;
+    dst[2] = tmp1.z;
+    dst[3] = tmp1.w;
+    dst[4] = tmp2.x;
+    dst[5] = tmp2.y;
+    dst[6] = tmp2.z;
+    dst[7] = tmp2.w;
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -226,6 +265,7 @@ DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[1]) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//TODO: explore non temporal loads here -- alignment needed
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[1]) {
 #ifdef __HIP_PLATFORM_HCC__
     reinterpret_cast<int*>(gmem)[0] = src[0];
@@ -239,31 +279,30 @@ DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[1]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    half *gmem_ = (half *) gmem;
-    half *src_ = (half *) src;
-    for (int i = 0; i < 4; i++) {
-      gmem_[i] = src_[i];
-    }
-#else
     reinterpret_cast<int2*>(gmem)[0] = make_int2(src[0], src[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//TODO: explore non temporal loads here -- alignment needed
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[2]) {
 #ifdef __HIP_PLATFORM_HCC__
-    half *gmem_ = (half *) gmem;
-    half *src_ = (half *) src;
-    for (int i = 0; i < 4; i++) {
-      gmem_[i] = src_[i];
-    }
+    reinterpret_cast<int2*>(gmem)[0] = make_int2(src[0], src[1]);
 #else
     asm volatile ("st.global.cs.v2.s32 [%0], {%1,%2};"
         :: "l"((uint *)gmem) , "r"(src[0]), "r"( src[1]));
 #endif
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef __HIP_PLATFORM_HCC__
+
+DEVICE_FUNCTION void stg(uint16_t *gmem, int (&src)[4]) {
+    reinterpret_cast<int4*>(gmem)[0] = make_int4(src[0], src[1], src[2], src[3]);
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -273,6 +312,16 @@ DEVICE_FUNCTION void stg(uint16_t *gmem, float (&src)[N]) {
     from_float(tmp, src);
     stg(gmem, tmp);
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef __HIP_PLATFORM_HCC__
+
+//TODO: explore non temporal loads here -- alignment needed
+DEVICE_FUNCTION void stg_stream(uint16_t *gmem, int (&src)[4]) {
+    reinterpret_cast<int4*>(gmem)[0] = make_int4(src[0], src[1], src[2], src[3]);
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -287,63 +336,45 @@ DEVICE_FUNCTION void stg_stream(uint16_t *gmem, float (&src)[N]) {
 
 #ifdef __HIP_PLATFORM_HCC__
 DEVICE_FUNCTION void stg(uint16_t *gmem, float (&src)[4]) {
-    half *gmem_ = (half *) gmem;
-    gmem_[0] = __float2half(src[0]);
-    gmem_[1] = __float2half(src[1]);
-    gmem_[2] = __float2half(src[2]);
-    gmem_[3] = __float2half(src[3]);
+    int2 *gmem_ = reinterpret_cast<int2 *>(gmem);
+    half2 tmp1 = __floats2half2_rn(src[0], src[1]);
+    half2 tmp2 = __floats2half2_rn(src[2], src[3]);
+    gmem_[0] = make_int2( reinterpret_cast<int &>(tmp1), reinterpret_cast<int &>(tmp2) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//TODO: explore non temporal loads here -- alignment needed
 DEVICE_FUNCTION void stg_stream(uint16_t *gmem, float (&src)[4]) {
-    half *gmem_ = (half *) gmem;
-    gmem_[0] = __float2half(src[0]);
-    gmem_[1] = __float2half(src[1]);
-    gmem_[2] = __float2half(src[2]);
-    gmem_[3] = __float2half(src[3]);
+    int2 *gmem_ = reinterpret_cast<int2 *>(gmem);
+    half2 tmp1 = __floats2half2_rn(src[0], src[1]);
+    half2 tmp2 = __floats2half2_rn(src[2], src[3]);
+    gmem_[0] = make_int2( reinterpret_cast<int &>(tmp1), reinterpret_cast<int &>(tmp2) );
 }
 #endif
 
 DEVICE_FUNCTION void read_from_gmem(float (&dst)[2], const float *gmem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    dst[0] = gmem[2*idx];
-    dst[1] = gmem[2*idx+1];
-#else
     float2 tmp = __ldg(reinterpret_cast<const float2*>(&gmem[2*idx]));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_gmem(float (&dst)[4], const float *gmem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    dst[0] = gmem[4*idx];
-    dst[1] = gmem[4*idx+1];
-    dst[2] = gmem[4*idx+2];
-    dst[3] = gmem[4*idx+3];
-#else
     float4 tmp = __ldg(reinterpret_cast<const float4*>(&gmem[4*idx]));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
     dst[2] = tmp.z;
     dst[3] = tmp.w;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(float (&x)[2], const float *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[2*idx];
-    x[1] = smem[2*idx+1];
-#else
-    float2 tmp = *(const float2*) &smem[2*idx];
+    float2 tmp = *reinterpret_cast<const float2*>(&smem[2*idx]);
     x[0] = tmp.x;
     x[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -355,79 +386,54 @@ DEVICE_FUNCTION void read_from_smem(int (&x)[1], const int *smem, int idx) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(float (&x)[4], const float *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[4*idx];
-    x[1] = smem[4*idx+1];
-    x[2] = smem[4*idx+2];
-    x[3] = smem[4*idx+3];
-#else
-    float4 tmp = *(const float4*) &smem[4*idx];
+    float4 tmp = *reinterpret_cast<const float4*>(&smem[4*idx]);
     x[0] = tmp.x;
     x[1] = tmp.y;
     x[2] = tmp.z;
     x[3] = tmp.w;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void read_from_smem(int (&x)[2], const int *smem, int idx) {
-#ifdef __HIP_PLATFORM_HCC__
-    x[0] = smem[2*idx];
-    x[1] = smem[2*idx+1];
-#else
-    int2 tmp = *(const int2*) &smem[2*idx];
+    int2 tmp = *reinterpret_cast<const int2*>(&smem[2*idx]);
     x[0] = tmp.x;
     x[1] = tmp.y;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_gmem(float *gmem, int idx, const float (&src)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[2*idx] = src[0];
-    gmem[2*idx+1] = src[1];
-#else
     reinterpret_cast<float2*>(&gmem[2*idx])[0] = make_float2(src[0], src[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_gmem(float *gmem, int idx, const float (&src)[4]) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[4*idx] = src[0];
-    gmem[4*idx+1] = src[1];
-    gmem[4*idx+2] = src[2];
-    gmem[4*idx+3] = src[3];
-#else
     reinterpret_cast<float4*>(&gmem[4*idx])[0] = make_float4(src[0], src[1], src[2], src[3]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void scaled_write_to_gmem(float *gmem, int idx, const float (&src)[4], const float coeff) {
-#ifdef __HIP_PLATFORM_HCC__
-    gmem[4*idx] = src[0]*coeff;
-    gmem[4*idx+1] = src[1]*coeff;
-    gmem[4*idx+2] = src[2]*coeff;
-    gmem[4*idx+3] = src[3]*coeff;
-#else
     reinterpret_cast<float4*>(&gmem[4*idx])[0] = make_float4(src[0]*coeff, src[1]*coeff, src[2]*coeff, src[3]*coeff);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[2]) {
 #ifdef __HIP_PLATFORM_HCC__
-    smem[2*idx] = x[0];
-    smem[2*idx+1] = x[1];
-#else
-    reinterpret_cast<float2*>(&smem[2*idx])[0] = make_float2(x[0], x[1]);
+
+DEVICE_FUNCTION void scaled_write_to_gmem(float *gmem, int idx, const float (&src)[8], const float coeff) {
+    reinterpret_cast<float4*>(&gmem[4*idx    ])[0] = make_float4(src[0]*coeff, src[1]*coeff, src[2]*coeff, src[3]*coeff);
+    reinterpret_cast<float4*>(&gmem[4*idx + 4])[0] = make_float4(src[4]*coeff, src[5]*coeff, src[6]*coeff, src[7]*coeff);
+}
+
 #endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[2]) {
+    reinterpret_cast<float2*>(&smem[2*idx])[0] = make_float2(x[0], x[1]);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -439,25 +445,13 @@ DEVICE_FUNCTION void write_to_smem(int *smem, int idx, const int (&x)[1]) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[4]) {
-#ifdef __HIP_PLATFORM_HCC__
-    smem[4*idx] = x[0];
-    smem[4*idx+1] = x[1];
-    smem[4*idx+2] = x[2];
-    smem[4*idx+3] = x[3];
-#else
     reinterpret_cast<float4*>(&smem[4*idx])[0] = make_float4(x[0], x[1], x[2], x[3]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DEVICE_FUNCTION void write_to_smem(int *smem, int idx, const int (&x)[2]) {
-#ifdef __HIP_PLATFORM_HCC__
-    smem[2*idx] = x[0];
-    smem[2*idx+1] = x[1];
-#else
     reinterpret_cast<int2*>(&smem[2*idx])[0] = make_int2(x[0], x[1]);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -540,6 +534,59 @@ DEVICE_FUNCTION void relu_activation(float (&x)[N]) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+#ifdef __HIP_PLATFORM_HCC__
+
+DEVICE_FUNCTION void write_to_smem(int *smem, int idx, const int (&x)[4]) {
+    reinterpret_cast<int4*>(&smem[4*idx])[0] = make_int4(x[0], x[1], x[2], x[3]);
+}
+
+DEVICE_FUNCTION void read_from_smem(int (&x)[4], const int *smem, int idx) {
+    int4 tmp = *reinterpret_cast<const int4*>(&smem[4*idx]);
+    x[0] = tmp.x;
+    x[1] = tmp.y;
+    x[2] = tmp.z;
+    x[3] = tmp.w;
+}
+
+DEVICE_FUNCTION void read_from_smem(float (&x)[8], const float *smem, int idx) {
+    float4 tmp1 = *reinterpret_cast<const float4*>(&smem[8*idx    ]);
+    float4 tmp2 = *reinterpret_cast<const float4*>(&smem[8*idx + 4]);
+    x[0] = tmp1.x;
+    x[1] = tmp1.y;
+    x[2] = tmp1.z;
+    x[3] = tmp1.w;
+    x[4] = tmp2.x;
+    x[5] = tmp2.y;
+    x[6] = tmp2.z;
+    x[7] = tmp2.w;
+}
+
+DEVICE_FUNCTION void read_from_gmem(float (&dst)[8], const float *gmem, int idx) {
+    float4 tmp1 = __ldg(reinterpret_cast<const float4*>(&gmem[8*idx    ]));
+    float4 tmp2 = __ldg(reinterpret_cast<const float4*>(&gmem[8*idx + 4]));
+    dst[0] = tmp1.x;
+    dst[1] = tmp1.y;
+    dst[2] = tmp1.z;
+    dst[3] = tmp1.w;
+    dst[4] = tmp2.x;
+    dst[5] = tmp2.y;
+    dst[6] = tmp2.z;
+    dst[7] = tmp2.w;
+}
+
+DEVICE_FUNCTION void write_to_smem(float *smem, int idx, const float (&x)[8]) {
+    reinterpret_cast<float4*>(&smem[4*idx    ])[0] = make_float4(x[0], x[1], x[2], x[3]);
+    reinterpret_cast<float4*>(&smem[4*idx + 4])[0] = make_float4(x[4], x[5], x[6], x[7]);
+}
+
+DEVICE_FUNCTION void write_to_gmem(float *gmem, int idx, const float (&src)[8]) {
+    reinterpret_cast<float4*>(&gmem[8*idx    ])[0] = make_float4(src[0], src[1], src[2], src[3]);
+    reinterpret_cast<float4*>(&gmem[8*idx + 4])[0] = make_float4(src[4], src[5], src[6], src[7]);
+}
+
+#endif
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template< int THREADS_PER_CTA >
 DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
                                         void* params_my_data, void** params_pair_datas, int off,
@@ -1176,6 +1223,9 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
                         } else {
 #endif
                             ldg(x_storage[i], &gmem_src[idx*params.c]);
+                            //if(threadIdx.x == 0 && blockDim.x == 0) {
+                            //    printf("x_storage [%d]: %d, %d, %d, %d\n", i, x_storage[i][0], x_storage[i][1], x_storage[i][2], x_storage[i][3]);
+                            //}
 #ifndef __HIP_PLATFORM_HCC__
                         }
 #endif
