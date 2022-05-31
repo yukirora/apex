@@ -253,9 +253,10 @@ if "--cuda_ext" in sys.argv:
 
         hipcc_args_mlp = ['-O3'] + version_dependent_macros
         if found_Backward_Pass_Guard:
-            hipcc_args_mlp = hipcc_args_mlp + ['-DBACKWARD_PASS_GUARD']
+            hipcc_args_mlp = hipcc_args_mlp + ['-DBACKWARD_PASS_GUARD'] + ['-DBACKWARD_PASS_GUARD_CLASS=BackwardPassGuard']
         if found_ROCmBackward_Pass_Guard:
-            hipcc_args_mlp = hipcc_args_mlp + ['-DROCM_BACKWARD_PASS_GUARD']
+            hipcc_args_mlp = hipcc_args_mlp + ['-DBACKWARD_PASS_GUARD'] + ['-DBACKWARD_PASS_GUARD_CLASS=ROCmBackwardPassGuard']
+
         print ("INFO: Building the MLP Extension.")
         ext_modules.append(
             CUDAExtension(name='mlp_cuda',
@@ -504,10 +505,9 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
                           '-U__HIP_NO_HALF_OPERATORS__',
                           '-U__HIP_NO_HALF_CONVERSIONS__'] + version_dependent_macros + generator_flag
         if found_Backward_Pass_Guard:
-            hipcc_args_mha = hipcc_args_mha + ['-DBACKWARD_PASS_GUARD']
+            hipcc_args_mha = hipcc_args_mha + ['-DBACKWARD_PASS_GUARD'] + ['-DBACKWARD_PASS_GUARD_CLASS=BackwardPassGuard']
         if found_ROCmBackward_Pass_Guard:
-            hipcc_args_mha = hipcc_args_mha + ['-DROCM_BACKWARD_PASS_GUARD']
-
+            hipcc_args_mha = hipcc_args_mha + ['-DBACKWARD_PASS_GUARD'] + ['-DBACKWARD_PASS_GUARD_CLASS=ROCmBackwardPassGuard']
 
         ext_modules.append(
             CUDAExtension(

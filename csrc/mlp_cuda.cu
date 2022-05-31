@@ -1511,10 +1511,7 @@ int mlp_bp(
     #define USE_GEMM_FLAGS_FP16_ALT_IMPL (PYTORCH_ROCBLAS_VERSION_DECIMAL >= 242)
     #if USE_GEMM_FLAGS_FP16_ALT_IMPL
       #ifdef BACKWARD_PASS_GUARD
-        flag = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
-      #endif
-      #ifdef ROCM_BACKWARD_PASS_GUARD
-        flag = at::ROCmBackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+        flag = at::BACKWARD_PASS_GUARD_CLASS::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
       #endif
     #endif
   #endif

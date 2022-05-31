@@ -382,14 +382,11 @@ std::vector<torch::Tensor> bwd_cuda(
     #define USE_GEMM_FLAGS_FP16_ALT_IMPL (PYTORCH_ROCBLAS_VERSION_DECIMAL >= 242)
     #if USE_GEMM_FLAGS_FP16_ALT_IMPL
       #ifdef BACKWARD_PASS_GUARD
-        flags = at::BackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
-      #endif
-      #ifdef ROCM_BACKWARD_PASS_GUARD
-        flags = at::ROCmBackwardPassGuard::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
+        flags = at::BACKWARD_PASS_GUARD_CLASS::is_backward_pass() ? rocblas_gemm_flags_fp16_alt_impl : 0;
       #endif
     #endif
   #endif
-  
+
   // Dropout Add Backward  
   apex_masked_scale_cuda<at::Half,float,uint32_t>(
                              static_cast<at::Half const*>(output_grads.data_ptr()),
