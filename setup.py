@@ -293,6 +293,13 @@ if "--cuda_ext" in sys.argv:
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':nvcc_args_transformer if not IS_ROCM_PYTORCH else hipcc_args_transformer}))
         ext_modules.append(
+            CUDAExtension(name='generic_scaled_masked_softmax_cuda',
+                          sources=['csrc/megatron/generic_scaled_masked_softmax.cpp',
+                                   'csrc/megatron/generic_scaled_masked_softmax_cuda.cu'],
+                          include_dirs=[os.path.join(this_dir, "csrc")],
+                          extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                                              'nvcc':nvcc_args_transformer if not IS_ROCM_PYTORCH else hipcc_args_transformer}))
+        ext_modules.append(
             CUDAExtension(name='scaled_masked_softmax_cuda',
                           sources=['csrc/megatron/scaled_masked_softmax.cpp',
                                    'csrc/megatron/scaled_masked_softmax_cuda.cu'],
@@ -555,7 +562,7 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
 if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
     if "--transducer" in sys.argv:
         sys.argv.remove("--transducer")
-    
+
     if not IS_ROCM_PYTORCH:
         raise_if_cuda_home_none("--transducer")
 
