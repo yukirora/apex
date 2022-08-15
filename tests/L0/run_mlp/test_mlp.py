@@ -1,10 +1,13 @@
 """Tests for c++ MLP"""
-import unittest
+from itertools import product
 from time import time
 import numpy as np
 
 import torch
 from torch import nn
+from torch.testing._internal import common_utils
+from torch.testing._internal.common_device_type import instantiate_device_type_tests
+from torch.testing._internal.common_device_type import onlyCUDA
 
 from apex.mlp import MLP
 from apex.testing.common_utils import skipFlakyTest
@@ -25,10 +28,51 @@ class TestMLP(unittest.TestCase):
         mlp_layers = []
         for i in range(mlp.num_layers):
             linear = nn.Linear(mlp_sizes[i], mlp_sizes[i + 1])
-            mlp.weights[i].data.copy_(linear.weight)
-            mlp.biases[i].data.copy_(linear.bias)
+            with torch.no_grad():
+                mlp.weights[i].copy_(linear.weight)
+                mlp.biases[i].copy_(linear.bias)
             mlp_layers.append(linear)
-            mlp_layers.append(nn.ReLU(inplace=True))
+            mlp_layers.append(nn.ReLU())
+
+        ref_mlp = nn.Sequential(*mlp_layers).cuda()
+
+        test_input = (
+            torch.empty(batch_size, mlp_sizes[0], device="cuda")
+            .uniform_(-1.0, 1.0)
+            .requires_grad_()
+        )
+        ref_input = test_input.clone().detach().requires_grad_()
+        mlp_out = mlp(test_input)
+        ref_out = ref_mlp(ref_input)
+        self.assertEqual(mlp_out, ref_out)
+
+        # Use mean value as scalar loss. Multiply 10 to make it big enough not zero out
+        mlp_out.mean().mul(10.0).backward()
+        ref_out.mean().mul(10.0).backward()
+        self.assertEqual(test_input.grad, ref_input.grad)
+        self.assertEqual(mlp.biases[0].grad, ref_mlp[0].bias.grad)
+
+    @common_utils.parametrize(
+        "use_activation,bias",
+        list(product(("none", "relu", "sigmoid"), (True, False))),
+    )
+    def test_mlp(self, use_activation: str, bias: bool):
+        # for use_activation in ["none", "relu", "sigmoid"]:
+        msg = f"activation: {use_activation}, bias: {bias}"
+        mlp = MLP(mlp_sizes, bias=bias, activation=use_activation).cuda()
+
+        mlp_layers = []
+        for i in range(mlp.num_layers):
+            linear = nn.Linear(mlp_sizes[i], mlp_sizes[i + 1], bias=bias)
+            with torch.no_grad():
+                mlp.weights[i].copy_(linear.weight)
+                if bias:
+                    mlp.biases[i].copy_(linear.bias)
+            mlp_layers.append(linear)
+            if use_activation == "relu":
+                mlp_layers.append(nn.ReLU())
+            if use_activation == "sigmoid":
+                mlp_layers.append(nn.Sigmoid())
 
         ref_mlp = nn.Sequential(*mlp_layers).cuda()
 
@@ -141,8 +185,9 @@ class TestMLP(unittest.TestCase):
         mlp_layers = []
         for i in range(mlp.num_layers):
             linear = nn.Linear(mlp_sizes[i], mlp_sizes[i + 1])
-            mlp.weights[i].data.copy_(linear.weight)
-            mlp.biases[i].data.copy_(linear.bias)
+            with torch.no_grad():
+                mlp.weights[i].copy_(linear.weight)
+                mlp.biases[i].copy_(linear.bias)
             mlp_layers.append(linear)
             mlp_layers.append(nn.ReLU(inplace=True))
 
@@ -220,3 +265,4 @@ class TestMLP(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
