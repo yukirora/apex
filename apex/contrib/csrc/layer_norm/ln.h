@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 #include <cuda_fp16.h>
-#include <cuda_bf16.h>
+// #include <cuda_bf16.h>
 
 namespace layer_norm {
 
@@ -121,7 +121,7 @@ extern BwdRegistry BWD_FUNCS;
 
 using fp32 = float;
 using fp16 = half;
-using bf16 = nv_bfloat16;
+// using bf16 = nv_bfloat16;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -133,10 +133,10 @@ struct TypeId<fp16>{
     constexpr static uint32_t Value = 0;
 };
 
-template<>
-struct TypeId<bf16>{
-    constexpr static uint32_t Value = 1;
-};
+// template<>
+// struct TypeId<bf16>{
+//     constexpr static uint32_t Value = 1;
+// };
 
 template<>
 struct TypeId<fp32>{

@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-#include <cuda_bf16.h>
+// #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 
 #include "ln.h"
@@ -188,10 +188,10 @@ struct TypeToVec2<half> {
     using Type = half2;
 };
 
-template<>
-struct TypeToVec2<nv_bfloat16> {
-    using Type = nv_bfloat162;
-};
+// template<>
+// struct TypeToVec2<nv_bfloat16> {
+//     using Type = nv_bfloat162;
+// };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -241,23 +241,23 @@ struct Converter<float2, half2>{
     }
 };
 
-template<>
-struct Converter<float2, nv_bfloat162>{
-    static inline __device__ nv_bfloat162 convert(const float2 &x) {
-#if __CUDA_ARCH__ >= 800
-        return __float22bfloat162_rn(x);
-#else
-        union {
-            nv_bfloat162 raw;
-            nv_bfloat16 x;
-            nv_bfloat16 y;
-        } tmp;
-        tmp.x = __float2bfloat16_rn(x.x);
-        tmp.y = __float2bfloat16_rn(x.y);
-        return tmp.raw;
-#endif
-    }
-};
+// template<>
+// struct Converter<float2, nv_bfloat162>{
+//     static inline __device__ nv_bfloat162 convert(const float2 &x) {
+// #if __CUDA_ARCH__ >= 800
+//         return __float22bfloat162_rn(x);
+// #else
+//         union {
+//             nv_bfloat162 raw;
+//             nv_bfloat16 x;
+//             nv_bfloat16 y;
+//         } tmp;
+//         tmp.x = __float2bfloat16_rn(x.x);
+//         tmp.y = __float2bfloat16_rn(x.y);
+//         return tmp.raw;
+// #endif
+//     }
+// };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
