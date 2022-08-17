@@ -7,6 +7,18 @@
 
 #include "ln.h"
 
+#ifdef __HIP_PLATFORM_HCC__
+#define APEX_WARP_SHFL_XOR(value, offset, width) __shfl_xor(value, offset, width)
+#else
+#define APEX_WARP_SHFL_XOR(value, offset, width) __shfl_xor_sync(value, offset, width)
+#endif
+
+#if defined __HIP_PLATFORM_HCC__
+#define SHFL_DOWN(mask,val,i) __shfl_down(val, i)
+#else
+#define SHFL_DOWN __shfl_down_sync
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 constexpr uint32_t THREADS_PER_WARP = 32;
@@ -88,7 +100,7 @@ struct Sum {
 
 template<typename T>
 inline __device__ T warp_shuffle_xor(const T & x, uint32_t idx){
-    return __shfl_xor_sync(uint32_t(-1), x, idx);
+    return APEX_WARP_SHFL_XOR(uint32_t(-1), x, idx);
 }
 
 template<>
@@ -98,7 +110,7 @@ inline __device__ float2 warp_shuffle_xor<float2>(const float2 & x, uint32_t idx
 
 template<typename T>
 inline __device__ T warp_shuffle_down(const T & x, uint32_t idx){
-    return __shfl_down_sync(uint32_t(-1), x, idx);
+    return SHFL_DOWN(uint32_t(-1), x, idx);
 }
 
 template<>

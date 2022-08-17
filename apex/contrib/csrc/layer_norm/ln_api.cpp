@@ -30,11 +30,21 @@ BwdRegistry BWD_FUNCS;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//uint32_t get_type_id(torch::Dtype dtype){
+//    if( dtype == torch::kFloat16 ) {
+//        return TypeId<fp16>::Value;
+//    } else if( dtype == torch::kBFloat16 ) {
+//        return TypeId<bf16>::Value;
+//    } else if( dtype == torch::kFloat32 ) {
+//        return TypeId<fp32>::Value;
+//    } else {
+//        TORCH_CHECK(false, "Type not supported: ", dtype);
+//    }
+//}
+
 uint32_t get_type_id(torch::Dtype dtype){
     if( dtype == torch::kFloat16 ) {
         return TypeId<fp16>::Value;
-    } else if( dtype == torch::kBFloat16 ) {
-        return TypeId<bf16>::Value;
     } else if( dtype == torch::kFloat32 ) {
         return TypeId<fp32>::Value;
     } else {

@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <cuda_fp16.h>
+#include <functional>
 // #include <cuda_bf16.h>
 
 namespace layer_norm {
@@ -108,6 +109,7 @@ struct BwdParams : public ParamsBase {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+using std::function;
 using FwdFunction = std::function<void(LaunchParams<FwdParams>&, const bool)>;
 using BwdFunction = std::function<void(LaunchParams<BwdParams>&, const bool)>;
 using FunctionKey = uint64_t;
