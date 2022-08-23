@@ -489,9 +489,10 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
             )
         )
 
-if "--transducer" in sys.argv:
-    sys.argv.remove("--transducer")
-    raise_if_cuda_home_none("--transducer")
+if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--transducer" in sys.argv:
+        sys.argv.remove("--transducer")
+
     ext_modules.append(
         CUDAExtension(
             name="transducer_joint_cuda",
@@ -501,7 +502,7 @@ if "--transducer" in sys.argv:
             ],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros + generator_flag,
-                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros + generator_flag),
+                "nvcc": ["-O3"] + version_dependent_macros + generator_flag,
             },
             include_dirs=[os.path.join(this_dir, "csrc"), os.path.join(this_dir, "apex/contrib/csrc/multihead_attn")],
         )
@@ -516,7 +517,7 @@ if "--transducer" in sys.argv:
             include_dirs=[os.path.join(this_dir, "csrc")],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros,
-                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros),
+                "nvcc": ["-O3"] + version_dependent_macros,
             },
         )
     )
