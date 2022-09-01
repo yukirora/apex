@@ -362,23 +362,42 @@ if os.path.exists(os.path.join(torch_dir, "include", "ATen", "CUDAGeneratorImpl.
 
 if "--fast_layer_norm" in sys.argv:
     sys.argv.remove("--fast_layer_norm")
-    raise_if_cuda_home_none("--fast_layer_norm")
-    # Check, if CUDA11 is installed for compute capability 8.0
-    cc_flag = []
-    _, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
-    if int(bare_metal_major) >= 11:
-        cc_flag.append("-gencode")
-        cc_flag.append("arch=compute_80,code=sm_80")
+    #raise_if_cuda_home_none("--fast_layer_norm")
+    ## Check, if CUDA11 is installed for compute capability 8.0
+    #cc_flag = []
+    #_, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
+    #if int(bare_metal_major) >= 11:
+    #    cc_flag.append("-gencode")
+    #    cc_flag.append("arch=compute_80,code=sm_80")
 
-    if CUDA_HOME is None and not IS_ROCM_PYTORCH:
-        raise RuntimeError("--fast_layer_norm was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
-    else:
-        # Check, if CUDA11 is installed for compute capability 8.0
-        cc_flag = []
-        _, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
-        if int(bare_metal_major) >= 11:
-            cc_flag.append('-gencode')
-            cc_flag.append('arch=compute_80,code=sm_80')
+    #if CUDA_HOME is None and not IS_ROCM_PYTORCH:
+    #    raise RuntimeError("--fast_layer_norm was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
+    #else:
+    #    # Check, if CUDA11 is installed for compute capability 8.0
+    #    cc_flag = []
+    #    _, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
+    #    if int(bare_metal_major) >= 11:
+    #        cc_flag.append('-gencode')
+    #        cc_flag.append('arch=compute_80,code=sm_80')
+
+    nvcc_args_fast_layer_norm = ['-maxrregcount=50', '-O3', '--use_fast_math'] + version_dependent_macros
+    hipcc_args_fast_layer_norm = ['-O3'] + version_dependent_macros
+    print ("INFO: Building fast layernorm extension.")
+    ext_modules.append(
+        CUDAExtension(name='fast_layer_norm_cuda',
+                      sources=[#'apex/contrib/csrc/layer_norm/ln.h',
+                               'apex/contrib/csrc/layer_norm/ln_api.cpp',
+                               #'apex/contrib/csrc/layer_norm/ln_bwd_kernels.cuh',
+                               'apex/contrib/csrc/layer_norm/ln_bwd_semi_cuda_kernel.cu',
+                               'apex/contrib/csrc/layer_norm/ln_fwd_cuda_kernel.cu',
+                               #'apex/contrib/csrc/layer_norm/ln_fwd_kernels.cuh',
+                               #'apex/contrib/csrc/layer_norm/ln_kernel_traits.h',
+                               #'apex/contrib/csrc/layer_norm/ln_utils.cuh'
+                              ],
+                      include_dirs=[os.path.join(this_dir, 'csrc'),
+                                    os.path.join(this_dir, 'apex/contrib/csrc/layer_norm')],
+                      extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                                          'nvcc': nvcc_args_fast_layer_norm if not IS_ROCM_PYTORCH else hipcc_args_fast_layer_norm}))
 
 if "--fmha" in sys.argv:
     sys.argv.remove("--fmha")
