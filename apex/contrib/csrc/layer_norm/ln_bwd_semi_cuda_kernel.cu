@@ -35,7 +35,7 @@ void launch_(LaunchParams<BwdParams> &launch_params, const bool configure_params
 
     if( configure_params ) {
         int ctas_per_sm;
-        cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        cudaError_t status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &ctas_per_sm, kernel, Kernel_traits::THREADS_PER_CTA, Kernel_traits::SMEM_BYTES);
         launch_params.params.ctas_per_col = launch_params.props->multiProcessorCount * ctas_per_sm / Kernel_traits::CTAS_PER_ROW;
         launch_params.barrier_size = 0;
@@ -52,7 +52,11 @@ void launch_(LaunchParams<BwdParams> &launch_params, const bool configure_params
     }
 
     if( Kernel_traits::SMEM_BYTES >= 48 * 1024 ) {
+        // hipify missing cudaFuncSetAttribute, cudaFuncAttributeMaxDynamicSharedMemorySize
+#ifdef USE_ROCM
+#else
         CHECK_CUDA(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
+#endif
     }
     auto stream = launch_params.stream;
     auto ctas_per_col = launch_params.params.ctas_per_col;
@@ -60,10 +64,14 @@ void launch_(LaunchParams<BwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::CTAS_PER_ROW == 1 ) {
         kernel<<<ctas_per_col, Kernel_traits::THREADS_PER_CTA, Kernel_traits::SMEM_BYTES, stream>>>(launch_params.params);
     } else {
+#ifdef USE_ROCM
+        assert(0 && "hipLaunchCooperativeKernel TODO");
+#else
         dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
         dim3 block(Kernel_traits::THREADS_PER_CTA);
         void *params_ = (void *)&launch_params.params;
         cudaLaunchCooperativeKernel((void *)kernel, grid, block, (void **)&params_, Kernel_traits::SMEM_BYTES, stream);
+#endif
     }
 
     using Kernel_traits_f = layer_norm::Kernel_traits_finalize<HIDDEN_SIZE,

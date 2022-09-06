@@ -4,6 +4,7 @@
 
 #ifdef USE_ROCM
 #include <hip/hip_bfloat16.h>
+#include "hip_bfloat162.h"
 #else
 #include <cuda_bf16.h>
 #endif
@@ -13,7 +14,11 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef USE_ROCM
+constexpr uint32_t THREADS_PER_WARP = warpSize;
+#else
 constexpr uint32_t THREADS_PER_WARP = 32;
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -92,7 +97,11 @@ struct Sum {
 
 template<typename T>
 inline __device__ T warp_shuffle_xor(const T & x, uint32_t idx){
+#ifdef USE_ROCM
+    return __shfl_xor(x, idx);
+#else
     return __shfl_xor_sync(uint32_t(-1), x, idx);
+#endif
 }
 
 template<>
@@ -102,7 +111,11 @@ inline __device__ float2 warp_shuffle_xor<float2>(const float2 & x, uint32_t idx
 
 template<typename T>
 inline __device__ T warp_shuffle_down(const T & x, uint32_t idx){
+#ifdef USE_ROCM
+    return __shfl_down(x, idx);
+#else
     return __shfl_down_sync(uint32_t(-1), x, idx);
+#endif
 }
 
 template<>
@@ -192,10 +205,17 @@ struct TypeToVec2<half> {
     using Type = half2;
 };
 
+#ifdef USE_ROCM
+template<>
+struct TypeToVec2<hip_bfloat16> {
+    using Type = hip_bfloat162;
+};
+#else
 template<>
 struct TypeToVec2<nv_bfloat16> {
     using Type = nv_bfloat162;
 };
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -245,6 +265,15 @@ struct Converter<float2, half2>{
     }
 };
 
+#ifdef USE_ROCM
+template<>
+struct Converter<float2, hip_bfloat162>{
+    static inline __device__ hip_bfloat162 convert(const float2 &x) {
+        hip_bfloat162 raw;
+        return raw;
+    }
+};
+#else
 template<>
 struct Converter<float2, nv_bfloat162>{
     static inline __device__ nv_bfloat162 convert(const float2 &x) {
@@ -262,6 +291,7 @@ struct Converter<float2, nv_bfloat162>{
 #endif
     }
 };
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -335,10 +365,19 @@ struct InterCTASync {
     }
 
     inline __device__ void spin_wait_(int *barrier, int step, int expected) {
+#ifdef USE_ROCM
+        atomicAdd(barrier, step);
+        for( int found = -1; found != expected; ) {
+            found = *barrier;
+        }
+#else
+        // reduction operation on global and shared memory
+        // reduction with operand b and value in a, store result at location a, overwriting original value
         asm volatile("red.release.gpu.global.add.s32 [%0], %1;" ::"l"(barrier), "r"(step));
         for( int found = -1; found != expected; ) {
             asm volatile("ld.global.acquire.gpu.b32 %0, [%1];" : "=r"(found) : "l"(barrier));
         }
+#endif
     }
 
     inline __device__ void sync(){
@@ -403,7 +442,11 @@ struct Reducer : public Reducer<T, 1, WARPS_M, WARPS_N> {
             workspace[bidn_] = data;
         }
         inter_cta_.sync();
+#ifdef USE_ROCM
+        static_assert(CTAS_PER_ROW <= warpSize);
+#else
         static_assert(CTAS_PER_ROW <= 32);
+#endif
         T total = Zeros<T>::get();
         if(this->lane_ < CTAS_PER_ROW){
             total = workspace[this->lane_];
@@ -429,7 +472,11 @@ struct Reducer<T, 1, WARPS_M, 1> {
     enum { SMEM_BYTES = 0 };
     enum { WORKSPACE_BYTES_PER_GROUP = 0 };
 
+#ifdef USE_ROCM
+    enum { THREADS_PER_WARP = 64 };
+#else
     enum { THREADS_PER_WARP = 32 };
+#endif
 
     template<typename Params>
     inline __device__ Reducer(Params & params, uint32_t bidm, uint32_t bidn, uint32_t warp_m, uint32_t warp_n, uint32_t lane, void * smem) 
@@ -477,7 +524,11 @@ struct Reducer<T, 1, WARPS_M, WARPS_N> : public Reducer<T, 1, WARPS_M, 1> {
     enum { SMEM_BYTES = Base::SMEM_BYTES + WARPS_M * WARPS_N * sizeof(T) * 2 };
     enum { WORKSPACE_BYTES_PER_GROUP = 0 };
 
+#ifdef USE_ROCM
+    enum { THREADS_PER_WARP = 64 };
+#else
     enum { THREADS_PER_WARP = 32 };
+#endif
 
     template<typename Params>
     inline __device__ Reducer(Params & params, uint32_t bidm, uint32_t bidn, uint32_t warp_m, uint32_t warp_n, uint32_t lane, void * smem) 
@@ -606,7 +657,11 @@ struct Stats {
         T m2 = Zeros<T>::get();
 
         // Assume CTA group size in N less than 32, such that we can finalize with a single warp.
+#ifdef USE_ROCM
+        static_assert(CTAS_PER_ROW <= warpSize);
+#else
         static_assert(CTAS_PER_ROW <= 32);
+#endif
 
         // Every warp does the final reduction locally. 
         if( lane_ < CTAS_PER_ROW ) {
@@ -671,7 +726,11 @@ struct Stats<T, 1, WARPS_M, WARPS_N> {
         T m2 = Zeros<T>::get();
 
         // Assume that there are less than 32 warps, such that we can finalize with a single warp
+#ifdef USE_ROCM
+        static_assert(WARPS_N <= warpSize);
+#else
         static_assert(WARPS_N <= 32);
+#endif
         if(lane < WARPS_N){
             stats_t result = smem[lane];
             n = N * THREADS_PER_WARP;
