@@ -54,8 +54,9 @@ void launch_(LaunchParams<BwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::SMEM_BYTES >= 48 * 1024 ) {
         // hipify missing cudaFuncSetAttribute, cudaFuncAttributeMaxDynamicSharedMemorySize
 #ifdef USE_ROCM
+        CHECK_CUDA(hipFuncSetAttribute((const void *)kernel, hipFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
 #else
-        CHECK_CUDA(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
+        CHECK_CUDA(cudaFuncSetAttribute((const void *)kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
 #endif
     }
     auto stream = launch_params.stream;

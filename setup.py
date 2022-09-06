@@ -381,7 +381,7 @@ if "--fast_layer_norm" in sys.argv:
     #        cc_flag.append('arch=compute_80,code=sm_80')
 
     nvcc_args_fast_layer_norm = ['-maxrregcount=50', '-O3', '--use_fast_math'] + version_dependent_macros
-    hipcc_args_fast_layer_norm = ['-O3'] + version_dependent_macros
+    hipcc_args_fast_layer_norm = ['-O3', '-U__HIP_NO_HALF_OPERATORS__', '-U__HIP_NO_HALF_CONVERSIONS__'] + version_dependent_macros
     print ("INFO: Building fast layernorm extension.")
     ext_modules.append(
         CUDAExtension(name='fast_layer_norm_cuda',

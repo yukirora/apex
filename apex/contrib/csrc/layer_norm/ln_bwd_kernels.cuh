@@ -18,6 +18,7 @@ void ln_bwd_kernel(layer_norm::BwdParams params) {
     enum { CTAS_PER_ROW = Ktraits::CTAS_PER_ROW };
 
     using compute_t = typename Ktraits::compute_t;
+    using input_t = typename Ktraits::input_t;
     using index_t = typename Ktraits::index_t;
     using Ivec = typename Ktraits::Ivec;
     using Ovec = typename Ktraits::Ovec;
@@ -119,7 +120,7 @@ void ln_bwd_kernel(layer_norm::BwdParams params) {
                 compute_t dy_tmp = dy[it * NUM_ELTS + jt];
                 compute_t y_tmp = y[it * NUM_ELTS + jt];
                 compute_t dx_tmp = rs_r * (dy_tmp - (mdyy_local * y_tmp + mdy_local));
-                dx[it].data.elt[jt] = dx_tmp;
+                dx[it].data.elt[jt] = input_t(dx_tmp);
             }
             dx[it].store_to(params.dx, idx);
             idx += Ktraits::VEC_COLS_PER_LDG;
