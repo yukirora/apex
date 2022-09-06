@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <unordered_map>
 #include <cuda_fp16.h>
 #ifdef USE_ROCM
