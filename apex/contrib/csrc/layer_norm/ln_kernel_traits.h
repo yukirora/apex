@@ -22,7 +22,11 @@ struct Kernel_traits_base {
 
     enum { HIDDEN_SIZE = HIDDEN_SIZE_ };
     enum { THREADS_PER_CTA = THREADS_PER_CTA_ };
+#ifdef USE_ROCM
+    enum { THREADS_PER_WARP = 64 };
+#else
     enum { THREADS_PER_WARP = 32 };
+#endif
 
 };
 
@@ -84,10 +88,10 @@ template<
     typename output_t_,
     typename compute_t_,
     typename index_t_,
-    uint32_t HIDDEN_SIZE_, 
-    uint32_t CTAS_PER_ROW_, 
-    uint32_t WARPS_M_, 
-    uint32_t WARPS_N_, 
+    uint32_t HIDDEN_SIZE_,
+    uint32_t CTAS_PER_ROW_,
+    uint32_t WARPS_M_,
+    uint32_t WARPS_N_,
     uint32_t BYTES_PER_LDG_ = 16,
     typename Base = Kernel_traits_base<
         HIDDEN_SIZE_,

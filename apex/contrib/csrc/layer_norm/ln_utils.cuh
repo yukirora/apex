@@ -608,8 +608,13 @@ inline __device__ void warp_chan_upd_dynamic(T &m_a, T &m2_a, T &n_a, int num_ac
         m2_a = m2_ab;
     }
     // Intra-warp broadcast (only lane 0 has valid stats).
+#ifdef USE_ROCM
+    m_a = __shfl(m_a, 0);
+    m2_a = __shfl(m2_a, 0);
+#else
     m_a = __shfl_sync(uint32_t(-1), m_a, 0);
     m2_a = __shfl_sync(uint32_t(-1), m2_a, 0);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
