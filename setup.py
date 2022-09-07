@@ -42,6 +42,55 @@ def get_cuda_bare_metal_version(cuda_dir):
 
     return raw_output, bare_metal_major, bare_metal_minor
 
+
+def check_cuda_torch_binary_vs_bare_metal(cuda_dir):
+    raw_output, bare_metal_major, bare_metal_minor = get_cuda_bare_metal_version(cuda_dir)
+    torch_binary_major = torch.version.cuda.split(".")[0]
+    torch_binary_minor = torch.version.cuda.split(".")[1]
+
+    print("\nCompiling cuda extensions with")
+    print(raw_output + "from " + cuda_dir + "/bin\n")
+
+    if (bare_metal_major != torch_binary_major) or (bare_metal_minor != torch_binary_minor):
+        raise RuntimeError(
+            "Cuda extensions are being compiled with a version of Cuda that does "
+            "not match the version used to compile Pytorch binaries.  "
+            "Pytorch binaries were compiled with Cuda {}.\n".format(torch.version.cuda)
+            + "In some cases, a minor-version mismatch will not cause later errors:  "
+            "https://github.com/NVIDIA/apex/pull/323#discussion_r287021798.  "
+            "You can try commenting out this check (at your own risk)."
+        )
+
+
+def raise_if_cuda_home_none(global_option: str) -> None:
+    if CUDA_HOME is not None:
+        return
+    raise RuntimeError(
+        f"{global_option} was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  "
+        "If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, "
+        "only images whose names contain 'devel' will provide nvcc."
+    )
+
+
+def append_nvcc_threads(nvcc_extra_args):
+    _, bare_metal_major, bare_metal_minor = get_cuda_bare_metal_version(CUDA_HOME)
+    if int(bare_metal_major) >= 11 and int(bare_metal_minor) >= 2:
+        return nvcc_extra_args + ["--threads", "4"]
+    return nvcc_extra_args
+
+
+def check_cudnn_version_and_warn(global_option: str, required_cudnn_version: int) -> bool:
+    cudnn_available = torch.backends.cudnn.is_available()
+    cudnn_version = torch.backends.cudnn.version() if cudnn_available else None
+    if not (cudnn_available and (cudnn_version >= required_cudnn_version)):
+        warnings.warn(
+            f"Skip `{global_option}` as it requires cuDNN {required_cudnn_version} or later, "
+            f"but {'cuDNN is not available' if not cudnn_available else cudnn_version}"
+        )
+        return False
+    return True
+
+
 print("\n\ntorch.__version__  = {}\n\n".format(torch.__version__))
 TORCH_MAJOR = int(torch.__version__.split('.')[0])
 TORCH_MINOR = int(torch.__version__.split('.')[1])
@@ -492,6 +541,9 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
 if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
     if "--transducer" in sys.argv:
         sys.argv.remove("--transducer")
+    
+    if not IS_ROCM_PYTORCH:
+        raise_if_cuda_home_none("--transducer")
 
     ext_modules.append(
         CUDAExtension(
@@ -502,7 +554,8 @@ if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
             ],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros + generator_flag,
-                "nvcc": ["-O3"] + version_dependent_macros + generator_flag,
+                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros + generator_flag) if not IS_ROCM_PYTORCH
+                        else ["-O3"] + version_dependent_macros + generator_flag,
             },
             include_dirs=[os.path.join(this_dir, "csrc"), os.path.join(this_dir, "apex/contrib/csrc/multihead_attn")],
         )
@@ -517,7 +570,8 @@ if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
             include_dirs=[os.path.join(this_dir, "csrc")],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros,
-                "nvcc": ["-O3"] + version_dependent_macros,
+                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros) if not IS_ROCM_PYTORCH
+                        else ["-O3"] + version_dependent_macros,
             },
         )
     )
