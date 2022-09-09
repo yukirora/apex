@@ -64,12 +64,12 @@ void launch_(LaunchParams<FwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::CTAS_PER_ROW == 1 ) {
         kernel<<<ctas_per_col, Kernel_traits::THREADS_PER_CTA, Kernel_traits::SMEM_BYTES_FWD, stream>>>(launch_params.params);
     } else {
-#ifdef USE_ROCM
-        assert(0 && "hipLaunchCooperativeKernel TODO");
-#else
-        dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
+	dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
         dim3 block(Kernel_traits::THREADS_PER_CTA);
         void *params_ = (void *)&launch_params.params;
+#ifdef USE_ROCM
+        hipLaunchCooperativeKernel((void *)kernel, grid, block, (void **)&params_, Kernel_traits::SMEM_BYTES_FWD, stream);
+#else
         cudaLaunchCooperativeKernel((void *)kernel, grid, block, (void **)&params_, Kernel_traits::SMEM_BYTES_FWD, stream);
 #endif
     }
