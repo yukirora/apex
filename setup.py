@@ -87,6 +87,7 @@ def check_cudnn_version_and_warn(global_option: str, required_cudnn_version: int
             f"but {'cuDNN is not available' if not cudnn_available else cudnn_version}"
         )
         return False
+    return True
 
 
 print("\n\ntorch.__version__  = {}\n\n".format(torch.__version__))
@@ -354,6 +355,41 @@ if "--xentropy" in sys.argv or "--cuda_ext" in sys.argv:
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':['-O3'] + version_dependent_macros}))
 
+if "--focal_loss" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--focal_loss" in sys.argv:
+        sys.argv.remove("--focal_loss")
+    ext_modules.append(
+        CUDAExtension(
+            name='focal_loss_cuda',
+            sources=[
+                'apex/contrib/csrc/focal_loss/focal_loss_cuda.cpp',
+                'apex/contrib/csrc/focal_loss/focal_loss_cuda_kernel.cu',
+            ],
+            include_dirs=[os.path.join(this_dir, 'csrc')],
+            extra_compile_args={
+                'cxx': ['-O3'] + version_dependent_macros,
+                'nvcc':(['-O3', '--use_fast_math', '--ftz=false'] if not IS_ROCM_PYTORCH else ['-O3']) + version_dependent_macros,
+            },
+        )
+    )
+
+if "--index_mul_2d" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--index_mul_2d" in sys.argv:
+        sys.argv.remove("--index_mul_2d")
+    ext_modules.append(
+        CUDAExtension(
+            name='fused_index_mul_2d',
+            sources=[
+                'apex/contrib/csrc/index_mul_2d/index_mul_2d_cuda.cpp',
+                'apex/contrib/csrc/index_mul_2d/index_mul_2d_cuda_kernel.cu',
+            ],
+            include_dirs=[os.path.join(this_dir, 'csrc')],
+            extra_compile_args={
+                'cxx': ['-O3'] + version_dependent_macros,
+                'nvcc':(['-O3', '--use_fast_math', '--ftz=false'] if not IS_ROCM_PYTORCH else ['-O3']) + version_dependent_macros,
+            },
+        )
+    )
 
 if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
@@ -544,9 +580,13 @@ if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
             )
         )
 
-if "--transducer" in sys.argv:
-    sys.argv.remove("--transducer")
-    raise_if_cuda_home_none("--transducer")
+if "--transducer" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--transducer" in sys.argv:
+        sys.argv.remove("--transducer")
+    
+    if not IS_ROCM_PYTORCH:
+        raise_if_cuda_home_none("--transducer")
+
     ext_modules.append(
         CUDAExtension(
             name="transducer_joint_cuda",
@@ -556,7 +596,8 @@ if "--transducer" in sys.argv:
             ],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros + generator_flag,
-                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros + generator_flag),
+                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros + generator_flag) if not IS_ROCM_PYTORCH
+                        else ["-O3"] + version_dependent_macros + generator_flag,
             },
             include_dirs=[os.path.join(this_dir, "csrc"), os.path.join(this_dir, "apex/contrib/csrc/multihead_attn")],
         )
@@ -571,7 +612,8 @@ if "--transducer" in sys.argv:
             include_dirs=[os.path.join(this_dir, "csrc")],
             extra_compile_args={
                 "cxx": ["-O3"] + version_dependent_macros,
-                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros),
+                "nvcc": append_nvcc_threads(["-O3"] + version_dependent_macros) if not IS_ROCM_PYTORCH
+                        else ["-O3"] + version_dependent_macros,
             },
         )
     )
@@ -591,9 +633,13 @@ if "--fast_bottleneck" in sys.argv:
             )
         )
 
-if "--peer_memory" in sys.argv:
-    sys.argv.remove("--peer_memory")
-    raise_if_cuda_home_none("--peer_memory")
+if "--peer_memory" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--peer_memory" in sys.argv:
+        sys.argv.remove("--peer_memory")
+
+    if not IS_ROCM_PYTORCH:
+        raise_if_cuda_home_none("--peer_memory")
+
     ext_modules.append(
         CUDAExtension(
             name="peer_memory_cuda",
@@ -605,9 +651,13 @@ if "--peer_memory" in sys.argv:
         )
     )
 
-if "--nccl_p2p" in sys.argv:
-    sys.argv.remove("--nccl_p2p")
-    raise_if_cuda_home_none("--nccl_p2p")
+if "--nccl_p2p" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--nccl_p2p" in sys.argv:
+        sys.argv.remove("--nccl_p2p")
+
+    if not IS_ROCM_PYTORCH:
+        raise_if_cuda_home_none("--nccl_p2p")
+
     ext_modules.append(
         CUDAExtension(
             name="nccl_p2p_cuda",
