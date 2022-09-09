@@ -42,6 +42,53 @@ def get_cuda_bare_metal_version(cuda_dir):
 
     return raw_output, bare_metal_major, bare_metal_minor
 
+def check_cuda_torch_binary_vs_bare_metal(cuda_dir):
+    raw_output, bare_metal_major, bare_metal_minor = get_cuda_bare_metal_version(cuda_dir)
+    torch_binary_major = torch.version.cuda.split(".")[0]
+    torch_binary_minor = torch.version.cuda.split(".")[1]
+
+    print("\nCompiling cuda extensions with")
+    print(raw_output + "from " + cuda_dir + "/bin\n")
+
+    if (bare_metal_major != torch_binary_major) or (bare_metal_minor != torch_binary_minor):
+        raise RuntimeError(
+            "Cuda extensions are being compiled with a version of Cuda that does "
+            "not match the version used to compile Pytorch binaries.  "
+            "Pytorch binaries were compiled with Cuda {}.\n".format(torch.version.cuda)
+            + "In some cases, a minor-version mismatch will not cause later errors:  "
+            "https://github.com/NVIDIA/apex/pull/323#discussion_r287021798.  "
+            "You can try commenting out this check (at your own risk)."
+        )
+
+
+def raise_if_cuda_home_none(global_option: str) -> None:
+    if CUDA_HOME is not None:
+        return
+    raise RuntimeError(
+        f"{global_option} was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  "
+        "If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, "
+        "only images whose names contain 'devel' will provide nvcc."
+    )
+
+
+def append_nvcc_threads(nvcc_extra_args):
+    _, bare_metal_major, bare_metal_minor = get_cuda_bare_metal_version(CUDA_HOME)
+    if int(bare_metal_major) >= 11 and int(bare_metal_minor) >= 2:
+        return nvcc_extra_args + ["--threads", "4"]
+    return nvcc_extra_args
+
+
+def check_cudnn_version_and_warn(global_option: str, required_cudnn_version: int) -> bool:
+    cudnn_available = torch.backends.cudnn.is_available()
+    cudnn_version = torch.backends.cudnn.version() if cudnn_available else None
+    if not (cudnn_available and (cudnn_version >= required_cudnn_version)):
+        warnings.warn(
+            f"Skip `{global_option}` as it requires cuDNN {required_cudnn_version} or later, "
+            f"but {'cuDNN is not available' if not cudnn_available else cudnn_version}"
+        )
+        return False
+
+
 print("\n\ntorch.__version__  = {}\n\n".format(torch.__version__))
 TORCH_MAJOR = int(torch.__version__.split('.')[0])
 TORCH_MINOR = int(torch.__version__.split('.')[1])
@@ -360,39 +407,28 @@ torch_dir = torch.__path__[0]
 if os.path.exists(os.path.join(torch_dir, "include", "ATen", "CUDAGeneratorImpl.h")):
     generator_flag = ["-DOLD_GENERATOR_PATH"]
 
-if "--fast_layer_norm" in sys.argv:
-    sys.argv.remove("--fast_layer_norm")
-    #raise_if_cuda_home_none("--fast_layer_norm")
-    ## Check, if CUDA11 is installed for compute capability 8.0
-    #cc_flag = []
-    #_, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
-    #if int(bare_metal_major) >= 11:
-    #    cc_flag.append("-gencode")
-    #    cc_flag.append("arch=compute_80,code=sm_80")
+if "--fast_layer_norm" in sys.argv or "--cuda_ext" in sys.argv:
+    if "--fast_layer_norm" in sys.argv:
+        sys.argv.remove("--fast_layer_norm")
 
-    #if CUDA_HOME is None and not IS_ROCM_PYTORCH:
-    #    raise RuntimeError("--fast_layer_norm was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
-    #else:
-    #    # Check, if CUDA11 is installed for compute capability 8.0
-    #    cc_flag = []
-    #    _, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
-    #    if int(bare_metal_major) >= 11:
-    #        cc_flag.append('-gencode')
-    #        cc_flag.append('arch=compute_80,code=sm_80')
+    if not IS_ROCM_PYTORCH:
+        raise_if_cuda_home_none("--fast_layer_norm")
+    # Check, if CUDA11 is installed for compute capability 8.0
+    cc_flag = []
+    if not IS_ROCM_PYTORCH:
+        _, bare_metal_major, _ = get_cuda_bare_metal_version(CUDA_HOME)
+        if int(bare_metal_major) >= 11:
+            cc_flag.append("-gencode")
+            cc_flag.append("arch=compute_80,code=sm_80")
 
     nvcc_args_fast_layer_norm = ['-maxrregcount=50', '-O3', '--use_fast_math'] + version_dependent_macros
     hipcc_args_fast_layer_norm = ['-O3', '-U__HIP_NO_HALF_OPERATORS__', '-U__HIP_NO_HALF_CONVERSIONS__'] + version_dependent_macros
-    print ("INFO: Building fast layernorm extension.")
+    
     ext_modules.append(
-        CUDAExtension(name='fast_layer_norm_cuda',
-                      sources=[#'apex/contrib/csrc/layer_norm/ln.h',
-                               'apex/contrib/csrc/layer_norm/ln_api.cpp',
-                               #'apex/contrib/csrc/layer_norm/ln_bwd_kernels.cuh',
+        CUDAExtension(name='fast_layer_norm',
+                      sources=['apex/contrib/csrc/layer_norm/ln_api.cpp',
                                'apex/contrib/csrc/layer_norm/ln_bwd_semi_cuda_kernel.cu',
                                'apex/contrib/csrc/layer_norm/ln_fwd_cuda_kernel.cu',
-                               #'apex/contrib/csrc/layer_norm/ln_fwd_kernels.cuh',
-                               #'apex/contrib/csrc/layer_norm/ln_kernel_traits.h',
-                               #'apex/contrib/csrc/layer_norm/ln_utils.cuh'
                               ],
                       include_dirs=[os.path.join(this_dir, 'csrc'),
                                     os.path.join(this_dir, 'apex/contrib/csrc/layer_norm')],
