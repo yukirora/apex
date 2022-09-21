@@ -31,9 +31,9 @@ if os.path.exists(context_file):
                 found_Backward_Pass_Guard = True
             break
 
-found_aten_atmoic_header = False
+found_aten_atomic_header = False
 if os.path.exists(os.path.join(torch_dir, "include", "ATen", "Atomic.cuh")):
-    found_aten_atmoic_header = True
+    found_aten_atomic_header = True
 
 def get_cuda_bare_metal_version(cuda_dir):
     raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
@@ -365,7 +365,7 @@ if "--index_mul_2d" in sys.argv or "--cuda_ext" in sys.argv:
     args_index_mul_2d = ['-O3']
     if not IS_ROCM_PYTORCH:
         args_index_mul_2d += ['--use_fast_math', '--ftz=false']
-    if found_aten_atmoic_header:
+    if found_aten_atomic_header:
         args_index_mul_2d += ['-DATEN_ATOMIC_HEADER']
 
     ext_modules.append(
