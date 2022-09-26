@@ -175,15 +175,25 @@ class FusedSGD(Optimizer):
                 if self.materialize_master_grads:
                     fp16_model_params = [p for i, p in enumerate(
                         stash.fp16_groups[gid]) if stash.fp32_from_fp16_groups[gid][i].grad is not None]
-                    fp32_from_fp16_grads = [p.grad for p in stash.fp32_from_fp16_groups[gid] if p.grad is not None]
                     fp32_from_fp16_params = [p for p in stash.fp32_from_fp16_groups[gid] if p.grad is not None]
+                    fp32_from_fp16_grads = []
+                    for p in fp32_from_fp16_params:
+                        if p.is_contiguous():
+                            fp32_from_fp16_grads.append(p.grad)
+                        else:
+                            fp32_from_fp16_grads.append(p.grad.to(memory_format=torch.channels_last))
                     fp32_from_fp16_momentums, first_runs[0] = self.get_momentums(fp32_from_fp16_params)
 
                     fp16_set = [fp32_from_fp16_grads, fp32_from_fp16_params,
                                 fp32_from_fp16_momentums, fp16_model_params]
                 else:
                     fp16_model_params = [p for p in stash.fp16_groups[gid] if p.grad is not None]
-                    fp16_model_grads = [p.grad for p in stash.fp16_groups[gid] if p.grad is not None]
+                    fp16_model_grads = []
+                    for p in fp16_model_params:
+                        if p.is_contiguous():
+                            fp16_model_grads.append(p.grad)
+                        else:
+                            fp16_model_grads.append(p.grad.to(memory_format=torch.channels_last))
                     fp32_from_fp16_params = [p for i, p in enumerate(
                         stash.fp32_from_fp16_groups[gid]) if stash.fp16_groups[gid][i].grad is not None]
                     fp32_from_fp16_momentums, first_runs[0] = self.get_momentums(fp32_from_fp16_params)
@@ -194,11 +204,21 @@ class FusedSGD(Optimizer):
                 launch_sets= [fp16_set, [fp32_grads, fp32_params, fp32_momentums]]
             else:
                 fp16_params = [p for p in group['params'] if (p.dtype == torch.float16 and p.grad is not None)]
-                fp16_grads = [p.grad for p in group['params'] if (p.dtype == torch.float16 and p.grad is not None)]
+                fp16_grads = []
+                for p in fp16_params:
+                    if p.is_contiguous():
+                        fp16_grads.append(p.grad)
+                    else:
+                        fp16_grads.append(p.grad.to(memory_format=torch.channels_last))
                 fp16_momentums, first_runs[0] = self.get_momentums(fp16_params)
 
                 fp32_params = [p for p in group['params'] if (p.dtype == torch.float32 and p.grad is not None)]
-                fp32_grads = [p.grad for p in group['params'] if (p.dtype == torch.float32 and p.grad is not None)]
+                fp32_grads = []
+                for p in fp32_params:
+                    if p.is_contiguous():
+                        fp32_grads.append(p.grad)
+                    else:
+                        fp32_grads.append(p.grad.to(memory_format=torch.channels_last))
                 fp32_momentums, first_runs[1] = self.get_momentums(fp32_params)
 
                 launch_sets = [[fp16_grads, fp16_params, fp16_momentums],
