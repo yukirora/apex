@@ -134,6 +134,7 @@ class TestMLP(common_utils.TestCase):
         ref_out.mean().mul(10.0).backward()
         self.assertEqual(mlp.weights[0].grad, ref_mlp[0].weight.grad)
 
+    @skipFlakyTest
     def test_performance_half(self):
         mlp = MLP(mlp_sizes).cuda().half()
 
