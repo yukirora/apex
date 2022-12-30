@@ -315,7 +315,6 @@ if "--cuda_ext" in sys.argv:
                                         os.path.join(this_dir, 'csrc/megatron')],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':nvcc_args_transformer if not IS_ROCM_PYTORCH else hipcc_args_transformer}))
-        # TODO (hubertlu): support fused_weight_gradient_mlp_cuda for ROCm
         if not IS_ROCM_PYTORCH:
             if bare_metal_version >= Version("11.0"):
                 cc_flag = []
@@ -330,16 +329,16 @@ if "--cuda_ext" in sys.argv:
                     cc_flag.append("-gencode")
                     cc_flag.append("arch=compute_90,code=sm_90")
 
-            ext_modules.append(
-            CUDAExtension(name='fused_weight_gradient_mlp_cuda',
-                          sources=['csrc/megatron/fused_weight_gradient_dense.cpp',
-                                   'csrc/megatron/fused_weight_gradient_dense_cuda.cu',
-                                   'csrc/megatron/fused_weight_gradient_dense_16bit_prec_cuda.cu'],
-                          include_dirs=[os.path.join(this_dir, 'csrc'),
-                                        os.path.join(this_dir, 'csrc/megatron')],
-                          extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
-                                              'nvcc':append_nvcc_threads(nvcc_args_transformer + ['--use_fast_math'] + cc_flag) 
-                                              if not IS_ROCM_PYTORCH else hipcc_args_transformer}))
+        ext_modules.append(
+        CUDAExtension(name='fused_weight_gradient_mlp_cuda',
+                        sources=['csrc/megatron/fused_weight_gradient_dense.cpp',
+                                'csrc/megatron/fused_weight_gradient_dense_cuda.cu',
+                                'csrc/megatron/fused_weight_gradient_dense_16bit_prec_cuda.cu'],
+                        include_dirs=[os.path.join(this_dir, 'csrc'),
+                                    os.path.join(this_dir, 'csrc/megatron')],
+                        extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                                            'nvcc':append_nvcc_threads(nvcc_args_transformer + ['--use_fast_math'] + cc_flag) 
+                                            if not IS_ROCM_PYTORCH else hipcc_args_transformer}))
 
 
 if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
