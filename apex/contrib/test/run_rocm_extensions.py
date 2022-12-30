@@ -13,6 +13,10 @@ TEST_ROOT = os.path.dirname(os.path.abspath(__file__))
 TEST_DIRS = [
     "fused_dense",
     "layer_norm",    # not fully supported on ROCm
+    "conv_bias_relu",# not fully supported on ROCm
+    "fmha",          # not fully supported on ROCm
+    #"cudnn_gbn",    # not fully supported on ROCm
+    #"bottleneck",   # not fully supported on ROCm
     "multihead_attn",
     "transducer",
     "focal_loss",
