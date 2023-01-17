@@ -666,6 +666,47 @@ DEVICE_FUNCTION void parallel_sums_16x2(float *smem, float (&x)[4], int nhw,
 
             add(x, other);
         }
+#else
+	for (int sync_iter=0; sync_iter < sync_iters; ++sync_iter) {
+            void* params_pair_data = params_pair_datas[sync_iter];
+
+            // skip the space consumed by previous sync iterations
+            const int xbuf_offset = sync_iter*data_total;
+            // data starts after flags, but have to skip previous
+            const int data_offset = xbuf_offset
+                                    + off*ELEMENTS_PER_LDG*THREADS_PER_PIXEL*2
+                                    + ELEMENTS_PER_LDG*threadIdx.x*2;
+
+            // after sums for this GPU were computed, let CTA0 broadcast the sum to over GPU
+            if (blockIdx.x == 0) {
+                volatile float * write_data =
+                    &((reinterpret_cast<float*>(params_pair_data))[data_offset]);
+
+                asm volatile ("flat_store_dwordx4 [%0], {%1,%2,%3,%4};"
+                    :: "v"(write_data) , "v"(x[0]), "v"(magic), "v"(x[2]), "v"(magic));
+
+                asm volatile ("flat_store_dwordx4 [%0], {%1,%2,%3,%4};"
+                    :: "v"(write_data+4) , "v"(x[1]), "v"(magic), "v"(x[3]), "r"(magic));
+            }
+
+            // now each CTA (on each GPU) reads the data written by CTA 0 of the other GPU
+            volatile float * read_data =
+                &((reinterpret_cast<float*>(params_my_data))[data_offset]);
+
+            float other[4];
+            uint32_t other_flag_a, other_flag_b;
+            do {
+                asm volatile ("flat_load_dwordx4 {%0, %1, %2, %3}, [%4];"
+                    : "=v"(other[0]), "=v"(other_flag_a), "=v"(other[2]), "=v"(other_flag_b) : "v"(read_data));
+            } while ((other_flag_a != magic) || (other_flag_b != magic));
+
+            do {
+                asm volatile ("flat_load_dwordx4 {%0, %1, %2, %3}, [%4];"
+                    : "=v"(other[1]), "=v"(other_flag_a), "=v"(other[3]), "=v"(other_flag_b) : "v"(read_data+4));
+            } while ((other_flag_a != magic) || (other_flag_b != magic));
+
+            add(x, other);
+        }
 #endif
         // finally, after syncing up and accounting for partial sums from
         // other GPUs as required, write the result
