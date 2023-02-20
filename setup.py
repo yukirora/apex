@@ -31,6 +31,9 @@ if os.path.exists(context_file):
                 found_Backward_Pass_Guard = True
             break
 
+found_aten_atomic_header = False
+if os.path.exists(os.path.join(torch_dir, "include", "ATen", "Atomic.cuh")):
+    found_aten_atomic_header = True
 
 def get_cuda_bare_metal_version(cuda_dir):
     raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
@@ -136,7 +139,7 @@ if TORCH_MAJOR == 0 and TORCH_MINOR < 4:
         "Apex requires Pytorch 0.4 or newer.\nThe latest stable release can be obtained from https://pytorch.org/"
     )
 
-cmdclass = {}
+# cmdclass = {}
 ext_modules = []
 
 extras = {}
@@ -145,7 +148,6 @@ if "--cpp_ext" in sys.argv or "--cuda_ext" in sys.argv:
     if TORCH_MAJOR == 0:
         raise RuntimeError("--cpp_ext requires Pytorch 1.0 or later, "
                            "found torch.__version__ = {}".format(torch.__version__))
-    cmdclass['build_ext'] = BuildExtension
 if "--cpp_ext" in sys.argv:
     sys.argv.remove("--cpp_ext")
     ext_modules.append(CppExtension("apex_C", ["csrc/flatten_unflatten.cpp"]))
@@ -167,12 +169,8 @@ if (TORCH_MAJOR > 1) or (TORCH_MAJOR == 1 and TORCH_MINOR > 4):
 version_dependent_macros = version_ge_1_1 + version_ge_1_3 + version_ge_1_5
 
 if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--distributed_adam" in sys.argv:
         sys.argv.remove("--distributed_adam")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--distributed_adam was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -189,12 +187,8 @@ if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
                                               'nvcc':nvcc_args_adam if not IS_ROCM_PYTORCH else hipcc_args_adam}))
 
 if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--distributed_lamb" in sys.argv:
         sys.argv.remove("--distributed_lamb")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--distributed_lamb was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -211,8 +205,6 @@ if "--distributed_lamb" in sys.argv or "--cuda_ext" in sys.argv:
                                               'nvcc': nvcc_args_distributed_lamb if not IS_ROCM_PYTORCH else hipcc_args_distributed_lamb}))
 
 if "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
-
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--cuda_ext was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
     else:
@@ -310,12 +302,8 @@ if "--cuda_ext" in sys.argv:
 
 
 if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--bnp" in sys.argv:
         sys.argv.remove("--bnp")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--bnp was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -335,12 +323,8 @@ if "--bnp" in sys.argv or "--cuda_ext" in sys.argv:
                                                       '-D__CUDA_NO_HALF2_OPERATORS__'] + version_dependent_macros}))
 
 if "--xentropy" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--xentropy" in sys.argv:
         sys.argv.remove("--xentropy")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--xentropy was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -376,6 +360,13 @@ if "--focal_loss" in sys.argv or "--cuda_ext" in sys.argv:
 if "--index_mul_2d" in sys.argv or "--cuda_ext" in sys.argv:
     if "--index_mul_2d" in sys.argv:
         sys.argv.remove("--index_mul_2d")
+
+    args_index_mul_2d = ['-O3']
+    if not IS_ROCM_PYTORCH:
+        args_index_mul_2d += ['--use_fast_math', '--ftz=false']
+    if found_aten_atomic_header:
+        args_index_mul_2d += ['-DATEN_ATOMIC_HEADER']
+
     ext_modules.append(
         CUDAExtension(
             name='fused_index_mul_2d',
@@ -386,18 +377,14 @@ if "--index_mul_2d" in sys.argv or "--cuda_ext" in sys.argv:
             include_dirs=[os.path.join(this_dir, 'csrc')],
             extra_compile_args={
                 'cxx': ['-O3'] + version_dependent_macros,
-                'nvcc':(['-O3', '--use_fast_math', '--ftz=false'] if not IS_ROCM_PYTORCH else ['-O3']) + version_dependent_macros,
+                'nvcc': args_index_mul_2d + version_dependent_macros,
             },
         )
     )
 
 if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--deprecated_fused_adam" in sys.argv:
         sys.argv.remove("--deprecated_fused_adam")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--deprecated_fused_adam was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -415,12 +402,8 @@ if "--deprecated_fused_adam" in sys.argv or "--cuda_ext" in sys.argv:
                                               'nvcc' : nvcc_args_fused_adam if not IS_ROCM_PYTORCH else hipcc_args_fused_adam}))
 
 if "--deprecated_fused_lamb" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--deprecated_fused_lamb" in sys.argv:
         sys.argv.remove("--deprecated_fused_lamb")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--deprecated_fused_lamb was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -518,12 +501,8 @@ if "--fmha" in sys.argv:
 
 
 if "--fast_multihead_attn" in sys.argv or "--cuda_ext" in sys.argv:
-    from torch.utils.cpp_extension import CUDAExtension
     if "--fast_multihead_attn" in sys.argv:
         sys.argv.remove("--fast_multihead_attn")
-
-    from torch.utils.cpp_extension import BuildExtension
-    cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
 
     if torch.utils.cpp_extension.CUDA_HOME is None and not IS_ROCM_PYTORCH:
         raise RuntimeError("--fast_multihead_attn was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
@@ -695,7 +674,6 @@ setup(
     ),
     description="PyTorch Extensions written by NVIDIA",
     ext_modules=ext_modules,
-    cmdclass=cmdclass,
-    #cmdclass={'build_ext': BuildExtension} if ext_modules else {},
+    cmdclass={'build_ext': BuildExtension} if ext_modules else {},
     extras_require=extras,
 )
