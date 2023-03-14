@@ -65,7 +65,7 @@ void launch_(LaunchParams<BwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::CTAS_PER_ROW == 1 ) {
         kernel<<<ctas_per_col, Kernel_traits::THREADS_PER_CTA, Kernel_traits::SMEM_BYTES, stream>>>(launch_params.params);
     } else {
-	dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
+	    dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
         dim3 block(Kernel_traits::THREADS_PER_CTA);
         void *params_ = (void *)&launch_params.params;
 #ifdef USE_ROCM
@@ -157,99 +157,194 @@ REGISTER_BWD_LAUNCHER( 6144, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
 REGISTER_BWD_LAUNCHER( 6144, bf16, bf16, bf16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
 REGISTER_BWD_LAUNCHER( 6144, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
-REGISTER_BWD_LAUNCHER( 8192, fp32, fp32, fp32, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER( 8192, fp16, fp16, fp16, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER( 8192, fp16, fp32, fp16, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER( 8192, bf16, bf16, bf16, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER( 8192, bf16, fp32, bf16, fp32, 2, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER( 8192, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER( 8192, fp16, fp16, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER( 8192, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER( 8192, bf16, bf16, bf16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER( 8192, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(10240, fp32, fp32, fp32, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(10240, fp16, fp16, fp16, fp32, 2, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(10240, fp16, fp32, fp16, fp32, 2, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(10240, bf16, bf16, bf16, fp32, 2, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(10240, bf16, fp32, bf16, fp32, 2, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(10240, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(10240, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(10240, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(10240, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(10240, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(12288, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(12288, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(12288, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(12288, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(12288, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(12288, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(12288, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(12288, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(12288, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(12288, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(12800, fp32, fp32, fp32, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(12800, fp16, fp16, fp16, fp32, 5, 1, 4, is_rocm ? 4 :  8, 4);
-REGISTER_BWD_LAUNCHER(12800, fp16, fp32, fp16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(12800, bf16, bf16, bf16, fp32, 5, 1, 4, is_rocm ? 4 :  8, 4);
-REGISTER_BWD_LAUNCHER(12800, bf16, fp32, bf16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(12800, fp32, fp32, fp32, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(12800, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 4 :  8, 4);
+REGISTER_BWD_LAUNCHER(12800, fp16, fp32, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(12800, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 4 :  8, 4);
+REGISTER_BWD_LAUNCHER(12800, bf16, fp32, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
 
-REGISTER_BWD_LAUNCHER(14336, fp32, fp32, fp32, fp32, 4, 1, 4,  8, 4);
-REGISTER_BWD_LAUNCHER(14336, fp16, fp16, fp16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(14336, fp16, fp32, fp16, fp32, 4, 1, 4,  8, 4);
-REGISTER_BWD_LAUNCHER(14336, bf16, bf16, bf16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(14336, bf16, fp32, bf16, fp32, 4, 1, 4,  8, 4);
+REGISTER_BWD_LAUNCHER(14336, fp32, fp32, fp32, fp32, 1, 1, 4,  8, 4);
+REGISTER_BWD_LAUNCHER(14336, fp16, fp16, fp16, fp32, 1, 1, 4,  is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(14336, fp16, fp32, fp16, fp32, 1, 1, 4,  8, 4);
+REGISTER_BWD_LAUNCHER(14336, bf16, bf16, bf16, fp32, 1, 1, 4,  is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(14336, bf16, fp32, bf16, fp32, 1, 1, 4,  8, 4);
 
-REGISTER_BWD_LAUNCHER(15360, fp32, fp32, fp32, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(15360, fp16, fp16, fp16, fp32, 4, 1, 4,  is_rocm ? 2 : 4, 4);
-REGISTER_BWD_LAUNCHER(15360, fp16, fp32, fp16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(15360, bf16, bf16, bf16, fp32, 4, 1, 4,  is_rocm ? 2 : 4, 4);
-REGISTER_BWD_LAUNCHER(15360, bf16, fp32, bf16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(15360, fp32, fp32, fp32, fp32, 1, 1, 4,  is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(15360, fp16, fp16, fp16, fp32, 1, 1, 4,  is_rocm ? 2 : 4, 4);
+REGISTER_BWD_LAUNCHER(15360, fp16, fp32, fp16, fp32, 1, 1, 4,  is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(15360, bf16, bf16, bf16, fp32, 1, 1, 4,  is_rocm ? 2 : 4, 4);
+REGISTER_BWD_LAUNCHER(15360, bf16, fp32, bf16, fp32, 1, 1, 4,  is_rocm ? 4 : 8, 4);
 
-REGISTER_BWD_LAUNCHER(16384, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(16384, fp16, fp16, fp16, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(16384, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(16384, bf16, bf16, bf16, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(16384, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(16384, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(16384, fp16, fp16, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(16384, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(16384, bf16, bf16, bf16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(16384, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(18432, fp32, fp32, fp32, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(18432, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 4 :  8, 4);
-REGISTER_BWD_LAUNCHER(18432, fp16, fp32, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(18432, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 4 :  8, 4);
-REGISTER_BWD_LAUNCHER(18432, bf16, fp32, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(18432, fp32, fp32, fp32, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(18432, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 4 :  8, 4);
+REGISTER_BWD_LAUNCHER(18432, fp16, fp32, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(18432, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 4 :  8, 4);
+REGISTER_BWD_LAUNCHER(18432, bf16, fp32, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
 
-REGISTER_BWD_LAUNCHER(20480, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(20480, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(20480, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(20480, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(20480, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(20480, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(20480, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(20480, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(20480, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(20480, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(24576, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(24576, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(24576, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(24576, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(24576, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(24576, fp32, fp32, fp32, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(24576, fp16, fp16, fp16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(24576, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(24576, bf16, bf16, bf16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(24576, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
-REGISTER_BWD_LAUNCHER(25600, fp32, fp32, fp32, fp32, 5, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(25600, fp16, fp16, fp16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(25600, fp16, fp32, fp16, fp32, 5, 1, 4, 16, 4);
-REGISTER_BWD_LAUNCHER(25600, bf16, bf16, bf16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(25600, bf16, fp32, bf16, fp32, 5, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(25600, fp32, fp32, fp32, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(25600, fp16, fp16, fp16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(25600, fp16, fp32, fp16, fp32, 1, 1, 4, 16, 4);
+REGISTER_BWD_LAUNCHER(25600, bf16, bf16, bf16, fp32, 1, 1, 4, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(25600, bf16, fp32, bf16, fp32, 1, 1, 4, 16, 4);
 
-REGISTER_BWD_LAUNCHER(30720, fp32, fp32, fp32, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(30720, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 2 : 4, 4);
-REGISTER_BWD_LAUNCHER(30720, fp16, fp32, fp16, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
-REGISTER_BWD_LAUNCHER(30720, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 2 : 4, 4);
-REGISTER_BWD_LAUNCHER(30720, bf16, fp32, bf16, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(30720, fp32, fp32, fp32, fp32, 1, 1, 8, is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(30720, fp16, fp16, fp16, fp32, 1, 1, 8, is_rocm ? 2 : 4, 4);
+REGISTER_BWD_LAUNCHER(30720, fp16, fp32, fp16, fp32, 1, 1, 8, is_rocm ? 4 : 8, 4);
+REGISTER_BWD_LAUNCHER(30720, bf16, bf16, bf16, fp32, 1, 1, 8, is_rocm ? 2 : 4, 4);
+REGISTER_BWD_LAUNCHER(30720, bf16, fp32, bf16, fp32, 1, 1, 8, is_rocm ? 4 : 8, 4);
 
-REGISTER_BWD_LAUNCHER(32768, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(32768, fp16, fp16, fp16, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(32768, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(32768, bf16, bf16, bf16, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(32768, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(32768, fp32, fp32, fp32, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(32768, fp16, fp16, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(32768, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(32768, bf16, bf16, bf16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(32768, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
-REGISTER_BWD_LAUNCHER(40960, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(40960, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(40960, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(40960, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(40960, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(40960, fp32, fp32, fp32, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(40960, fp16, fp16, fp16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(40960, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(40960, bf16, bf16, bf16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(40960, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
-REGISTER_BWD_LAUNCHER(49152, fp32, fp32, fp32, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(49152, fp16, fp16, fp16, fp32, 8, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(49152, fp16, fp32, fp16, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(49152, bf16, bf16, bf16, fp32, 8, 1, 8, is_rocm ? 8 : 16, 4);
-REGISTER_BWD_LAUNCHER(49152, bf16, fp32, bf16, fp32, 8, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(49152, fp32, fp32, fp32, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(49152, fp16, fp16, fp16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(49152, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(49152, bf16, bf16, bf16, fp32, 1, 1, 8, is_rocm ? 8 : 16, 4);
+REGISTER_BWD_LAUNCHER(49152, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
-REGISTER_BWD_LAUNCHER(65536, fp32, fp32, fp32, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(65536, fp16, fp16, fp16, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(65536, fp16, fp32, fp16, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(65536, bf16, bf16, bf16, fp32, 8, 1, 8, 16, 4);
-REGISTER_BWD_LAUNCHER(65536, bf16, fp32, bf16, fp32, 8, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(65536, fp32, fp32, fp32, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(65536, fp16, fp16, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(65536, fp16, fp32, fp16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(65536, bf16, bf16, bf16, fp32, 1, 1, 8, 16, 4);
+REGISTER_BWD_LAUNCHER(65536, bf16, fp32, bf16, fp32, 1, 1, 8, 16, 4);
 
+// REGISTER_BWD_LAUNCHER( 8192, fp32, fp32, fp32, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER( 8192, fp16, fp16, fp16, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER( 8192, fp16, fp32, fp16, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER( 8192, bf16, bf16, bf16, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER( 8192, bf16, fp32, bf16, fp32, 2, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(10240, fp32, fp32, fp32, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(10240, fp16, fp16, fp16, fp32, 2, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(10240, fp16, fp32, fp16, fp32, 2, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(10240, bf16, bf16, bf16, fp32, 2, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(10240, bf16, fp32, bf16, fp32, 2, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(12288, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(12288, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(12288, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(12288, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(12288, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(12800, fp32, fp32, fp32, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(12800, fp16, fp16, fp16, fp32, 5, 1, 4, is_rocm ? 4 :  8, 4);
+// REGISTER_BWD_LAUNCHER(12800, fp16, fp32, fp16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(12800, bf16, bf16, bf16, fp32, 5, 1, 4, is_rocm ? 4 :  8, 4);
+// REGISTER_BWD_LAUNCHER(12800, bf16, fp32, bf16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+
+// REGISTER_BWD_LAUNCHER(14336, fp32, fp32, fp32, fp32, 4, 1, 4,  8, 4);
+// REGISTER_BWD_LAUNCHER(14336, fp16, fp16, fp16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(14336, fp16, fp32, fp16, fp32, 4, 1, 4,  8, 4);
+// REGISTER_BWD_LAUNCHER(14336, bf16, bf16, bf16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(14336, bf16, fp32, bf16, fp32, 4, 1, 4,  8, 4);
+
+// REGISTER_BWD_LAUNCHER(15360, fp32, fp32, fp32, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(15360, fp16, fp16, fp16, fp32, 4, 1, 4,  is_rocm ? 2 : 4, 4);
+// REGISTER_BWD_LAUNCHER(15360, fp16, fp32, fp16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(15360, bf16, bf16, bf16, fp32, 4, 1, 4,  is_rocm ? 2 : 4, 4);
+// REGISTER_BWD_LAUNCHER(15360, bf16, fp32, bf16, fp32, 4, 1, 4,  is_rocm ? 4 : 8, 4);
+
+// REGISTER_BWD_LAUNCHER(16384, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(16384, fp16, fp16, fp16, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(16384, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(16384, bf16, bf16, bf16, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(16384, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(18432, fp32, fp32, fp32, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(18432, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 4 :  8, 4);
+// REGISTER_BWD_LAUNCHER(18432, fp16, fp32, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(18432, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 4 :  8, 4);
+// REGISTER_BWD_LAUNCHER(18432, bf16, fp32, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+
+// REGISTER_BWD_LAUNCHER(20480, fp32, fp32, fp32, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(20480, fp16, fp16, fp16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(20480, fp16, fp32, fp16, fp32, 4, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(20480, bf16, bf16, bf16, fp32, 4, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(20480, bf16, fp32, bf16, fp32, 4, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(24576, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(24576, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(24576, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(24576, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(24576, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(25600, fp32, fp32, fp32, fp32, 5, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(25600, fp16, fp16, fp16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(25600, fp16, fp32, fp16, fp32, 5, 1, 4, 16, 4);
+// REGISTER_BWD_LAUNCHER(25600, bf16, bf16, bf16, fp32, 5, 1, 4, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(25600, bf16, fp32, bf16, fp32, 5, 1, 4, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(30720, fp32, fp32, fp32, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(30720, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 2 : 4, 4);
+// REGISTER_BWD_LAUNCHER(30720, fp16, fp32, fp16, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
+// REGISTER_BWD_LAUNCHER(30720, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 2 : 4, 4);
+// REGISTER_BWD_LAUNCHER(30720, bf16, fp32, bf16, fp32, 4, 1, 8, is_rocm ? 4 : 8, 4);
+
+// REGISTER_BWD_LAUNCHER(32768, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(32768, fp16, fp16, fp16, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(32768, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(32768, bf16, bf16, bf16, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(32768, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(40960, fp32, fp32, fp32, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(40960, fp16, fp16, fp16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(40960, fp16, fp32, fp16, fp32, 4, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(40960, bf16, bf16, bf16, fp32, 4, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(40960, bf16, fp32, bf16, fp32, 4, 1, 8, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(49152, fp32, fp32, fp32, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(49152, fp16, fp16, fp16, fp32, 8, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(49152, fp16, fp32, fp16, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(49152, bf16, bf16, bf16, fp32, 8, 1, 8, is_rocm ? 8 : 16, 4);
+// REGISTER_BWD_LAUNCHER(49152, bf16, fp32, bf16, fp32, 8, 1, 8, 16, 4);
+
+// REGISTER_BWD_LAUNCHER(65536, fp32, fp32, fp32, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(65536, fp16, fp16, fp16, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(65536, fp16, fp32, fp16, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(65536, bf16, bf16, bf16, fp32, 8, 1, 8, 16, 4);
+// REGISTER_BWD_LAUNCHER(65536, bf16, fp32, bf16, fp32, 8, 1, 8, 16, 4);
