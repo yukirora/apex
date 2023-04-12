@@ -9,6 +9,7 @@
 /* Includes, cuda */
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+#include <hipblaslt/hipblaslt.h>
 
 #if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11000
 // includes cublaslt
@@ -211,6 +212,340 @@ cublasStatus_t gemm_bias(
       CUDA_R_32F,
       CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 #endif
+}
+
+int gemm_bias_lt(
+    hipblasLtHandle_t ltHandle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float *alpha, /* host pointer */
+    at::Half* A,
+    int lda,
+    at::Half* B,
+    int ldb,
+    const float *beta, /* host pointer */
+    at::Half* C,
+    int ldc,
+    void *workspace,
+    size_t workspaceSize,
+    cudaStream_t stream,
+    bool use_bias,
+    const void* bias) {
+  ////cublasStatus_t status = CUBLAS_STATUS_SUCCESS;
+  hipblasStatus_t status = HIPBLAS_STATUS_SUCCESS;
+
+  //cublasLtMatmulDescOpaque_t operationDesc = {};
+  //cublasLtMatrixLayoutOpaque_t Adesc = {}, Bdesc = {}, Cdesc = {};
+  //cublasLtMatmulPreferenceOpaque_t preference = {};
+  //typedef hipblasLtMatmulDescOpaque_t* hipblasLtMatmulDesc_t;
+  hipblasLtMatmulDesc_t  operationDesc;
+  hipblasLtMatrixLayout_t Adesc, Bdesc, Cdesc;
+  hipblasLtMatmulPreference_t preference;
+
+  int returnedResults                             = 0;
+  hipblasLtMatmulHeuristicResult_t heuristicResult = {};
+  hipblasLtEpilogue_t epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
+
+  // Create operation descriptor; see cublasLtMatmulDescAttributes_t
+  // for details about defaults; here we just set the transforms for
+  // A and B.
+  //status = cublasLtMatmulDescInit(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
+  status = hipblasLtMatmulDescCreate(&operationDesc, HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  if (use_bias) {
+    //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias));
+    status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias));
+    if (status != HIPBLAS_STATUS_SUCCESS) {
+      goto CLEANUP;
+    }
+      epilogue = HIPBLASLT_EPILOGUE_BIAS;
+  } 
+
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue));
+  if (status != HIPBLAS_STATUS_SUCCESS) {
+    goto CLEANUP;
+  }
+
+  // Create matrix descriptors. Not setting any extra attributes.
+  //status = cublasLtMatrixLayoutInit(
+  //  &Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatrixLayoutInit(
+  //  &Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatrixLayoutInit(&Cdesc, CUDA_R_16F, m, n, ldc);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  status = hipblasLtMatrixLayoutCreate(
+    &Adesc, HIPBLAS_R_16F, transa == HIPBLAS_OP_N ? m : k, transa == HIPBLAS_OP_N ? k : m, lda);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatrixLayoutCreate(
+    &Bdesc, HIPBLAS_R_16F, transb == HIPBLAS_OP_N ? k : n, transb == HIPBLAS_OP_N ? n : k, ldb);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatrixLayoutCreate(&Cdesc, HIPBLAS_R_16F, m, n, ldc);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+
+  // Create preference handle; In general, extra attributes can be
+  // used here to disable tensor ops or to make sure algo selected
+  // will work with badly aligned A, B, C. However, for simplicity
+  // here we assume A,B,C are always well aligned (e.g., directly
+  // come from cudaMalloc)
+  //status = cublasLtMatmulPreferenceInit(&preference);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulPreferenceSetAttribute(
+  //  &preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize));
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  status = hipblasLtMatmulPreferenceCreate(&preference);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatmulPreferenceSetAttribute(
+    preference, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+
+  // We just need the best available heuristic to try and run matmul.
+  // There is no guarantee that this will work. For example, if A is
+  // badly aligned, you can request more (e.g. 32) algos and try to
+  // run them one by one until something works.
+  status = hipblasLtMatmulAlgoGetHeuristic(
+    ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 1, &heuristicResult, &returnedResults);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  if (returnedResults == 0) {
+    status = HIPBLAS_STATUS_NOT_SUPPORTED;
+    goto CLEANUP;
+  }
+  //status = cublasLtMatmul(ltHandle,
+  //                        &operationDesc,
+  //                        alpha,
+  //                        A,
+  //                        &Adesc,
+  //                        B,
+  //                        &Bdesc,
+  //                        beta,
+  //                        C,
+  //                        &Cdesc,
+  //                        C,
+  //                        &Cdesc,
+  //                        //&heuristicResult.algo,
+  //                        NULL,
+  //                        workspace,
+  //                        workspaceSize,
+  //                        stream);
+  status = hipblasLtMatmul(ltHandle,
+                          operationDesc,
+                          alpha,
+                          A,
+                          Adesc,
+                          B,
+                          Bdesc,
+                          beta,
+                          C,
+                          Cdesc,
+                          C,
+                          Cdesc,
+                          &heuristicResult.algo,
+                          //NULL,
+                          workspace,
+                          workspaceSize,
+                          stream);
+
+
+CLEANUP:
+  // Descriptors are no longer needed as all GPU work was already
+  // enqueued.
+  return status == HIPBLAS_STATUS_SUCCESS ? 0 : 1;
+}
+
+int gemm_bias_lt(
+    hipblasLtHandle_t ltHandle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float *alpha, /* host pointer */
+    double* A,
+    int lda,
+    double* B,
+    int ldb,
+    const float *beta, /* host pointer */
+    double* C,
+    int ldc,
+    void *workspace,
+    size_t workspaceSize,
+    cudaStream_t stream,
+    bool use_bias,
+    const void* bias) {
+
+  return 1;
+}
+
+int gemm_bias_lt(
+    hipblasLtHandle_t ltHandle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float *alpha, /* host pointer */
+    float* A,
+    int lda,
+    float* B,
+    int ldb,
+    const float *beta, /* host pointer */
+    float* C,
+    int ldc,
+    void *workspace,
+    size_t workspaceSize,
+    cudaStream_t stream,
+    bool use_bias,
+    const void* bias) {
+  ////cublasStatus_t status = CUBLAS_STATUS_SUCCESS;
+  hipblasStatus_t status = HIPBLAS_STATUS_SUCCESS;
+
+  //cublasLtMatmulDescOpaque_t operationDesc = {};
+  //cublasLtMatrixLayoutOpaque_t Adesc = {}, Bdesc = {}, Cdesc = {};
+  //cublasLtMatmulPreferenceOpaque_t preference = {};
+  //typedef hipblasLtMatmulDescOpaque_t* hipblasLtMatmulDesc_t;
+  hipblasLtMatmulDesc_t  operationDesc;
+  hipblasLtMatrixLayout_t Adesc, Bdesc, Cdesc;
+  hipblasLtMatmulPreference_t preference;
+
+  int returnedResults                             = 0;
+  hipblasLtMatmulHeuristicResult_t heuristicResult = {};
+  hipblasLtEpilogue_t epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
+
+  // Create operation descriptor; see cublasLtMatmulDescAttributes_t
+  // for details about defaults; here we just set the transforms for
+  // A and B.
+  //status = cublasLtMatmulDescInit(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
+  status = hipblasLtMatmulDescCreate(&operationDesc, HIPBLASLT_COMPUTE_F32, HIPBLAS_R_32F);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  if (use_bias) {
+    //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias));
+    status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias));
+    if (status != HIPBLAS_STATUS_SUCCESS) {
+      goto CLEANUP;
+    }
+      epilogue = HIPBLASLT_EPILOGUE_BIAS;
+  } 
+
+  //status = cublasLtMatmulDescSetAttribute(&operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue));
+  status = hipblasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue));
+  if (status != HIPBLAS_STATUS_SUCCESS) {
+    goto CLEANUP;
+  }
+
+  // Create matrix descriptors. Not setting any extra attributes.
+  //status = cublasLtMatrixLayoutInit(
+  //  &Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatrixLayoutInit(
+  //  &Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatrixLayoutInit(&Cdesc, CUDA_R_16F, m, n, ldc);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  status = hipblasLtMatrixLayoutCreate(
+    &Adesc, HIPBLAS_R_32F, transa == HIPBLAS_OP_N ? m : k, transa == HIPBLAS_OP_N ? k : m, lda);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatrixLayoutCreate(
+    &Bdesc, HIPBLAS_R_32F, transb == HIPBLAS_OP_N ? k : n, transb == HIPBLAS_OP_N ? n : k, ldb);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatrixLayoutCreate(&Cdesc, HIPBLAS_R_32F, m, n, ldc);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+
+  // Create preference handle; In general, extra attributes can be
+  // used here to disable tensor ops or to make sure algo selected
+  // will work with badly aligned A, B, C. However, for simplicity
+  // here we assume A,B,C are always well aligned (e.g., directly
+  // come from cudaMalloc)
+  //status = cublasLtMatmulPreferenceInit(&preference);
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+  //status = cublasLtMatmulPreferenceSetAttribute(
+  //  &preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize));
+  //if (status != CUBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  status = hipblasLtMatmulPreferenceCreate(&preference);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+  status = hipblasLtMatmulPreferenceSetAttribute(
+    preference, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize));
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+
+  // We just need the best available heuristic to try and run matmul.
+  // There is no guarantee that this will work. For example, if A is
+  // badly aligned, you can request more (e.g. 32) algos and try to
+  // run them one by one until something works.
+  status = hipblasLtMatmulAlgoGetHeuristic(
+    ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 1, &heuristicResult, &returnedResults);
+  if (status != HIPBLAS_STATUS_SUCCESS) goto CLEANUP;
+
+  if (returnedResults == 0) {
+    status = HIPBLAS_STATUS_NOT_SUPPORTED;
+    goto CLEANUP;
+  }
+  //status = cublasLtMatmul(ltHandle,
+  //                        &operationDesc,
+  //                        alpha,
+  //                        A,
+  //                        &Adesc,
+  //                        B,
+  //                        &Bdesc,
+  //                        beta,
+  //                        C,
+  //                        &Cdesc,
+  //                        C,
+  //                        &Cdesc,
+  //                        //&heuristicResult.algo,
+  //                        NULL,
+  //                        workspace,
+  //                        workspaceSize,
+  //                        stream);
+  status = hipblasLtMatmul(ltHandle,
+                          operationDesc,
+                          alpha,
+                          A,
+                          Adesc,
+                          B,
+                          Bdesc,
+                          beta,
+                          C,
+                          Cdesc,
+                          C,
+                          Cdesc,
+                          &heuristicResult.algo,
+                          //NULL,
+                          workspace,
+                          workspaceSize,
+                          stream);
+
+
+CLEANUP:
+  // Descriptors are no longer needed as all GPU work was already
+  // enqueued.
+  return status == HIPBLAS_STATUS_SUCCESS ? 0 : 1;
 }
 
 
@@ -1233,11 +1568,11 @@ int linear_bias_forward_cuda(at::Tensor input, T *weight, at::Tensor bias, int i
     const float beta_zero       = 0.0;
     const float beta_one       = 1.0;
     int status = 1;
-#if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11000
+//#if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11000
     status = gemm_bias_lt(
-    (cublasLtHandle_t)handle,
-    CUBLAS_OP_T,
-    CUBLAS_OP_N,
+    (hipblasLtHandle_t)handle,
+    HIPBLAS_OP_T,
+    HIPBLAS_OP_N,
     out_features,
     batch_size,
     in_features,
@@ -1254,7 +1589,7 @@ int linear_bias_forward_cuda(at::Tensor input, T *weight, at::Tensor bias, int i
     stream,
     true,
     static_cast<const void*>(bias.data_ptr<T>()));
-#endif
+//#endif
     if (status != 0){
         output.copy_(bias);
         status = gemm_bias(

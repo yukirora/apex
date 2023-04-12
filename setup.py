@@ -276,6 +276,7 @@ if "--cuda_ext" in sys.argv:
             CUDAExtension(name='fused_dense_cuda',
                           sources=['csrc/fused_dense.cpp',
                                    'csrc/fused_dense_cuda.cu'],
+                          libraries=['hipblaslt'],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':['-O3'] + version_dependent_macros}))
         nvcc_args_transformer = ['-O3',
