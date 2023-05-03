@@ -53,9 +53,9 @@ void launch_(LaunchParams<FwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::SMEM_BYTES_FWD >= 48 * 1024 ) {
         // hipify missing cudaFuncSetAttribute, cudaFuncAttributeMaxDynamicSharedMemorySize
 #ifdef USE_ROCM
-        CHECK_CUDA(hipFuncSetAttribute((const void *)kernel, hipFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
+        CHECK_CUDA(hipFuncSetAttribute((const void *)kernel, hipFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES_FWD));
 #else
-        CHECK_CUDA(cudaFuncSetAttribute((const void *)kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES));
+        CHECK_CUDA(cudaFuncSetAttribute((const void *)kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Kernel_traits::SMEM_BYTES_FWD));
 #endif
     }
     auto stream = launch_params.stream;
@@ -64,7 +64,7 @@ void launch_(LaunchParams<FwdParams> &launch_params, const bool configure_params
     if( Kernel_traits::CTAS_PER_ROW == 1 ) {
         kernel<<<ctas_per_col, Kernel_traits::THREADS_PER_CTA, Kernel_traits::SMEM_BYTES_FWD, stream>>>(launch_params.params);
     } else {
-	dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
+	    dim3 grid(Kernel_traits::CTAS_PER_ROW * ctas_per_col);
         dim3 block(Kernel_traits::THREADS_PER_CTA);
         void *params_ = (void *)&launch_params.params;
 #ifdef USE_ROCM
@@ -82,6 +82,12 @@ constexpr bool is_rocm = true;
 constexpr bool is_rocm = false;
 #endif
 
+//  HIDDEN_SIZE, WTYPE, ITYPE, OTYPE, CTYPE, CTAS_PER_ROW, WARPS_M, WARPS_N, BYTES_PER_LDG
+REGISTER_FWD_LAUNCHER(  512, fp32, fp32, fp32, fp32, 1, 4, 2, 4);
+REGISTER_FWD_LAUNCHER(  512, fp16, fp16, fp16, fp32, 1, 4, 2, is_rocm ? 4 : 4);
+REGISTER_FWD_LAUNCHER(  512, fp16, fp32, fp16, fp32, 1, 4, 2, 4);
+REGISTER_FWD_LAUNCHER(  512, bf16, bf16, bf16, fp32, 1, 4, 2, is_rocm ? 4 : 4);
+REGISTER_FWD_LAUNCHER(  512, bf16, fp32, bf16, fp32, 1, 4, 2, 4);
 
 REGISTER_FWD_LAUNCHER(  768, fp32, fp32, fp32, fp32, 1, 4, 1, 16);
 REGISTER_FWD_LAUNCHER(  768, fp16, fp16, fp16, fp32, 1, 4, 1, is_rocm ? 8 : 16);
