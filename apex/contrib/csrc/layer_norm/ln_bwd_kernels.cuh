@@ -2,6 +2,8 @@
 
 namespace layer_norm {
 
+//__device__ uint64_t llvm_amdgcn_s_memrealtime() __asm("llvm.amdgcn.s.memrealtime");
+
 template<typename Ktraits>
 __global__ __launch_bounds__(Ktraits::THREADS_PER_CTA) 
 void ln_bwd_kernel(layer_norm::BwdParams params) {
@@ -41,13 +43,20 @@ void ln_bwd_kernel(layer_norm::BwdParams params) {
     const index_t r = bidm * Ktraits::ROWS_PER_CTA + warp_m;
     const index_t c = bidn * THREADS_PER_ROW + warp_n * THREADS_PER_WARP + lane;
 
-    static_assert(COLS == THREADS_PER_ROW * LDGS * NUM_ELTS * CTAS_PER_ROW);
+    static_assert(COLS == THREADS_PER_ROW * LDGS * NUM_ELTS * CTAS_PER_ROW, "LDGS needs to be a whole number. See ln_kernel_traits.h and update kernel parameters in REGISTER_BWD_LAUNCHER.");
 
     Cvec dzy_sum[LDGS];
     Cvec dz_sum[LDGS];
-
+    //uint64_t timer_start = 0;
+    //uint64_t timer_stop = 0;
+    //Tvec time = 0;
+    //timer_start = llvm_amdgcn_s_memrealtime();
     memset(dzy_sum, 0, sizeof(dzy_sum));
     memset(dz_sum, 0, sizeof(dz_sum));
+    //timer_stop - llvm_amdgcn_s_memrealtime();
+
+    //time[0].data.elt[0] = int64(timer_start - timer_stop);
+    //time.store_to(params.time, idx);
 
     compute_t * smem_wgrad = reinterpret_cast<compute_t*>(smem_);
     char *smem_dgrad = smem_ + Ktraits::SMEM_BYTES_WGRAD;
@@ -143,7 +152,7 @@ void ln_bwd_kernel(layer_norm::BwdParams params) {
 
         // Assumption: blockSize divides hidden size.
         enum { NUM_RES = COLS / Ktraits::THREADS_PER_CTA };
-        static_assert(NUM_RES * Ktraits::THREADS_PER_CTA == COLS, "");
+        static_assert(NUM_RES * Ktraits::THREADS_PER_CTA == COLS, "NUM_RES needs to be a whole number. See ln_kernel_traits.h and update kernel parameters in REGISTER_BWD_LAUNCHER.");
 
         idx = warp_m * Ktraits::VEC_COLS + tid_r;
         #pragma unroll
@@ -254,7 +263,7 @@ void ln_bwd_finalize_kernel(BwdParams params)
         void * smem_beta_out = &smem_[2 * Kernel_traits::SMEM_BYTES_TRANSPOSE + Kernel_traits::SMEM_BYTES_OUTPUT];
 
 
-        // More than one iter iff ROWS_PER_CTA < 32.
+        // More than one iter iff ROWS_PER_CTA < warpSize (IS_ROCM ---> =64, else =32).
         for( int w = warp; w < THREADS_PER_WARP; w += Kernel_traits::ROWS_PER_CTA ) {
             const int read_row = lane;
             const int read_col = w ^ read_row;
@@ -273,12 +282,21 @@ void ln_bwd_finalize_kernel(BwdParams params)
             #pragma unroll
             for( int it = 0; it < NUM_ELT; it++ ) {
                 compute_t b_i = dbeta_local.data.elt[it];
-                compute_t g_i = dgamma_local.data.elt[it];
                 b_i = reducer.allreduce(b_i, sum);
-                g_i = reducer.allreduce(g_i, sum);
-
-                dgamma_local.data.elt[it] = g_i;
                 dbeta_local.data.elt[it] = b_i;
+
+                compute_t g_i = dgamma_local.data.elt[it];
+                g_i = reducer.allreduce(g_i, sum);
+                dgamma_local.data.elt[it] = g_i;
+                
+
+                // compute_t b_i = dbeta_local.data.elt[it];
+                // compute_t g_i = dgamma_local.data.elt[it];
+                // b_i = reducer.allreduce(b_i, sum);
+                // g_i = reducer.allreduce(g_i, sum);
+
+                // dgamma_local.data.elt[it] = g_i;
+                // dbeta_local.data.elt[it] = b_i;
             }
 
             // Leader stores the result at the current column.
