@@ -15,7 +15,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef USE_ROCM
-constexpr uint32_t THREADS_PER_WARP = warpSize;
+constexpr uint32_t THREADS_PER_WARP = 64;
 #else
 constexpr uint32_t THREADS_PER_WARP = 32;
 #endif
@@ -151,43 +151,43 @@ struct BytesToType {};
 template<>
 struct BytesToType<64> {
     using Type = uint16;
-    static_assert(sizeof(Type) == 64);
+    static_assert(sizeof(Type) == 64, "is sizeof(uint16) = 64?");
 };
 
 template<>
 struct BytesToType<32> {
     using Type = uint8;
-    static_assert(sizeof(Type) == 32);
+    static_assert(sizeof(Type) == 32, "is sizeof(uint8) = 32?");
 };
 
 template<>
 struct BytesToType<16> {
     using Type = uint4;
-    static_assert(sizeof(Type) == 16);
+    static_assert(sizeof(Type) == 16, "is sizeof(uint4) = 16?");
 };
 
 template<>
 struct BytesToType<8> {
     using Type = uint64_t;
-    static_assert(sizeof(Type) == 8);
+    static_assert(sizeof(Type) == 8, "is sizeof(uint64_t) = 8?");
 };
 
 template<>
 struct BytesToType<4> {
     using Type = uint32_t;
-    static_assert(sizeof(Type) == 4);
+    static_assert(sizeof(Type) == 4, "is sizeof(uint32_t) = 4?");
 };
 
 template<>
 struct BytesToType<2> {
     using Type = uint16_t;
-    static_assert(sizeof(Type) == 2);
+    static_assert(sizeof(Type) == 2, "is sizeof(uint16_t) = 2?");
 };
 
 template<>
 struct BytesToType<1> {
     using Type = uint8_t;
-    static_assert(sizeof(Type) == 1);
+    static_assert(sizeof(Type) == 1, "is sizeof(uint8_t) = 8?");
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -443,9 +443,9 @@ struct Reducer : public Reducer<T, 1, WARPS_M, WARPS_N> {
         }
         inter_cta_.sync();
 #ifdef USE_ROCM
-        static_assert(CTAS_PER_ROW <= warpSize);
+        static_assert(CTAS_PER_ROW <= warpSize, "CTAS_PER_ROW <= warpSize.");
 #else
-        static_assert(CTAS_PER_ROW <= 32);
+        static_assert(CTAS_PER_ROW <= 32, "CTAS_PER_ROW <= 32.");
 #endif
         T total = Zeros<T>::get();
         if(this->lane_ < CTAS_PER_ROW){
@@ -663,9 +663,9 @@ struct Stats {
 
         // Assume CTA group size in N less than 32, such that we can finalize with a single warp.
 #ifdef USE_ROCM
-        static_assert(CTAS_PER_ROW <= warpSize);
+        static_assert(CTAS_PER_ROW <= warpSize, "CTAS_PER_ROW <= warpSize.");
 #else
-        static_assert(CTAS_PER_ROW <= 32);
+        static_assert(CTAS_PER_ROW <= 32, "CTAS_PER_ROW <= 32.");
 #endif
 
         // Every warp does the final reduction locally. 
@@ -732,9 +732,9 @@ struct Stats<T, 1, WARPS_M, WARPS_N> {
 
         // Assume that there are less than 32 warps, such that we can finalize with a single warp
 #ifdef USE_ROCM
-        static_assert(WARPS_N <= warpSize);
+        static_assert(WARPS_N <= warpSize, "CTAS_PER_ROW <= warpSize.");
 #else
-        static_assert(WARPS_N <= 32);
+        static_assert(WARPS_N <= 32, "CTAS_PER_ROW <= 32.");
 #endif
         if(lane < WARPS_N){
             stats_t result = smem[lane];
