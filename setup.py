@@ -74,6 +74,15 @@ def raise_if_cuda_home_none(global_option: str) -> None:
         "only images whose names contain 'devel' will provide nvcc."
     )
 
+def apex_version():
+    apex_version=0.1
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    apex_version_file = os.path.join(cwd, "version.txt")
+    if os.path.exists(apex_version_file):
+        with open(apex_version_file) as f:
+            apex_version = f.read().strip()
+    return apex_version
+
 
 def append_nvcc_threads(nvcc_extra_args):
     _, bare_metal_major, bare_metal_minor = get_cuda_bare_metal_version(CUDA_HOME)
@@ -662,7 +671,7 @@ if "--cuda_ext" in sys.argv:
 
 setup(
     name="apex",
-    version="0.1",
+    version=apex_version(),
     packages=find_packages(
         exclude=("build", "csrc", "include", "tests", "dist", "docs", "tests", "examples", "apex.egg-info",)
     ),
