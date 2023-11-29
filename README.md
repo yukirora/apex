@@ -122,6 +122,12 @@ Note: Pytorch version recommended is >=1.5 for extension build.
 python setup.py install
 ```
 
+### Supported Versions
+| APEX Version  | PyTorch Version |
+| ------------- | ------------- |
+| release/1.0.0 | release/1.12, 1.13 and 2.0 |
+| release/1.1.0 | release/2.1 |
+
 ### To install using extensions enabled use the following command in apex folder:
 ```
 # if pip >= 23.1 (ref: https://pip.pypa.io/en/stable/news/#v23-1) which supports multiple `--config-settings` with the same key...
