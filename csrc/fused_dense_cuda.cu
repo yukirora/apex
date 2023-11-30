@@ -124,6 +124,7 @@ cublasStatus_t gemm_bias(
       m,
       n,
       k,
+      alpha,
       A,
       CUDA_R_16F,
       lda,
