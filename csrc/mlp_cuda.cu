@@ -259,6 +259,7 @@ cublasStatus_t mlp_gemm(
       (rocblas_handle) handle,
       hipOperationToRocOperation(transa),
       hipOperationToRocOperation(transb),
+      m,
       n,
       k,
       alpha,
