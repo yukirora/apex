@@ -123,9 +123,9 @@ python setup.py install
 ```
 **APEX-PyTorch supported version matrix**
 
-| APEX Version  | PyTorch Version             |
-| ------------- | ----------------------------| 
-| release/1.0.0  | release/1.12 <br/> release/1.13  <br/>  release/2.0  <br/>rocm5.7_internal_testing   |
+| ``APEX Version`` | ``APEX branch``  | ``Torch Version`` |
+| ------------- | ------------- | ------------- |
+| ``1.0.0`` | release/1.0.0 | ``2.0`` and older |
 
 
 ### To install using extensions enabled use the following command in apex folder:
