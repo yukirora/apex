@@ -24,63 +24,46 @@ inline void checkCublasStatus(cublasStatus_t status) {
         throw std::logic_error("cuBLAS API failed");
     }
 }
+/*
+      |   aType    |   bType    |   cType    |     computeType     |
+      | ---------- | ---------- | ---------- | ------------------- |
+      | HIP_R_16F  | HIP_R_16F  | HIP_R_16F  | HIPBLAS_COMPUTE_16F |
+      | HIP_R_16F  | HIP_R_16F  | HIP_R_16F  | HIPBLAS_COMPUTE_32F |
+      | HIP_R_16F  | HIP_R_16F  | HIP_R_32F  | HIPBLAS_COMPUTE_32F |
+      | HIP_R_16BF | HIP_R_16BF | HIP_R_16BF | HIPBLAS_COMPUTE_32F |
+      | HIP_R_16BF | HIP_R_16BF | HIP_R_32F  | HIPBLAS_COMPUTE_32F |
+      | HIP_R_32F  | HIP_R_32F  | HIP_R_32F  | HIPBLAS_COMPUTE_32F |
+      | HIP_R_64F  | HIP_R_64F  | HIP_R_64F  | HIPBLAS_COMPUTE_64F |
+      | HIP_R_8I   | HIP_R_8I   | HIP_R_32I  | HIPBLAS_COMPUTE_32I |
+      | HIP_C_32F  | HIP_C_32F  | HIP_C_32F  | HIPBLAS_COMPUTE_32F |
+      | HIP_C_64F  | HIP_C_64F  | HIP_C_64F  | HIPBLAS_COMPUTE_64F |
 
-/***********************************************************
-* FP64 Wrapper around cublas GEMMEx
-***********************************************************/
+*/
+template <typename T>
 cublasStatus_t gemm_bias(
-		cublasHandle_t handle, cublasOperation_t transa,  cublasOperation_t transb,    
-		int m,    int n,    int k,    
-		const float* alpha,  
-		double* A,	int lda,    
-		double* B,    	int ldb,    
-		const float* beta,    
-		double* C,   	int ldc) 
+		cublasHandle_t handle, cublasOperation_t transa,  cublasOperation_t transb, int m, int n, int k, 
+		const float* alpha, T * A, int lda, T * B, int ldb, const float* beta, T * C, int ldc) 
 {
-  return cublasGemmEx( 
-	     	  handle, transa, transb, m, n, k, 
-	     	  alpha,  A, CUDA_R_64F, lda,  
-	      	          B, CUDA_R_64F, ldb, 
+// HIP_R_64F  | HIP_R_64F  | HIP_R_64F  | HIPBLAS_COMPUTE_64F
+  if (std::is_same<T, double>::value) {
+  return cublasGemmEx(handle, transa, transb, m, n, k, alpha, A, CUDA_R_64F, lda, B, CUDA_R_64F, ldb, 
 	     	  beta,   C, CUDA_R_64F, ldc, CUBLAS_COMPUTE_64F, CUBLAS_GEMM_DEFAULT);
-}
-
-
-/***********************************************************
-* FP32 Wrapper around cublas GEMMEx
-***********************************************************/
-cublasStatus_t gemm_bias( 
-	     	cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, 
-	     	int m,  int n, 	int k,  
-	      	const float* alpha, 
-	     	float* A,  int lda,    
-		float* B,  int ldb,  
-	      	const float* beta, 
-	     	float* C,  int ldc) 
-{
-  return cublasGemmEx( 
-	     	  handle,  transa,  transb,  m,  n,  k,  
-	      	  alpha,   A, CUDA_R_32F, lda,  
-	      	           B, CUDA_R_32F, ldb,  
+  }
+// HIP_R_32F  | HIP_R_32F  | HIP_R_32F  | HIPBLAS_COMPUTE_32F
+  if (std::is_same<T, float>::value) {
+  return cublasGemmEx(handle, transa, transb, m, n, k, alpha, A, CUDA_R_32F, lda, B, CUDA_R_32F, ldb,  
 	      	  beta,    C, CUDA_R_32F, ldc, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT);
-}
-
-/***********************************************************
-* FP16 Wrapper around cublas GEMMEx
-***********************************************************/
-cublasStatus_t gemm_bias(
-	    	cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, 
-	     	int m,  int n, 	int k,  
-	      	const float* alpha,
-	    	at::Half* A, int lda,   
-	       	at::Half* B, int ldb,    
-		const float* beta,   
-	       	at::Half* C, int ldc) 
-{
-  return cublasGemmEx(  
-		  handle,  transa,  transb,  m,  n,  k,  
-		  alpha,   A,  CUDA_R_16F,  lda,  
-		           B,  CUDA_R_16F,  ldb,  
+  }
+//  HIP_R_16F  | HIP_R_16F  | HIP_R_16F  | HIPBLAS_COMPUTE_16F
+  if (std::is_same<T, at::Half>::value) {
+  return cublasGemmEx(handle, transa, transb, m, n, k, alpha, A, CUDA_R_16F, lda, B, CUDA_R_16F, ldb,  
 	      	  beta,    C,  CUDA_R_16F,  ldc,  CUBLAS_COMPUTE_16F,  CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+  }
+// HIP_R_16BF | HIP_R_16BF | HIP_R_16BF | HIPBLAS_COMPUTE_32F
+  if (std::is_same<T, at::BFloat16>::value) {
+  return cublasGemmEx(handle, transa, transb, m, n, k, alpha, A, CUDA_R_16BF, lda, B, CUDA_R_16BF, ldb,
+                  beta,    C,  CUDA_R_16BF,  ldc,  CUBLAS_COMPUTE_32F,  CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+  }
 }
 
 
@@ -89,13 +72,8 @@ cublasStatus_t gemm_bias(
   *  
   ************************************************************************/
 template <typename T>
-int gemm_bias_lt(    
-		cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb,    
-		int m,  int n,  int k,	const float *alpha, 
-		T A,   int lda,    
-		T B,   int ldb, const float *beta, 
-		T C,   int ldc,    
-		void *workspace,  size_t workspaceSize, cudaStream_t stream,    
+int gemm_bias_lt(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int m,  int n,  int k,	const float *alpha, 
+		T A, int lda, T B, int ldb, const float *beta, T C, int ldc, void *workspace,  size_t workspaceSize, cudaStream_t stream,    
 		bool use_bias, const void* bias) 
 {
   cublasLtMatmulDesc_t               operationDesc = NULL;
@@ -108,48 +86,42 @@ int gemm_bias_lt(
 
   // create operation desciriptor; see cublasLtMatmulDescAttributes_t for details about defaults; here we just need to
   // set the transforms for A and B
+  if (std::is_same<T, at::BFloat16>::value) { 
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16BF, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16BF, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16BF, m, n, ldc));
+  }
   
-  if ((std::is_same<T, at::Half>::value) || (std::is_same<T, float>::value)) 
-  {  
-	  checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F)); 
+  if (std::is_same<T, at::Half>::value) { 
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
   }
 
-  if (std::is_same<T, double>::value)
-  {  
-	  checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F)); 
+  if (std::is_same<T, float>::value)  { 
+	checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
   }
 
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa))); 
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa))); 
-  
+  if (std::is_same<T, double>::value) { 
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
+  }
+
   if (use_bias)  {
     checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias))); 
     epilogue = CUBLASLT_EPILOGUE_BIAS;
   } 
 
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue))); 
- 
-  // create matrix descriptors, 
-  if (std::is_same<T, at::Half>::value) 
-  {
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
-  }
-
-  if (std::is_same<T, float>::value)
-  {
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
-  }
-
-  if (std::is_same<T, double>::value)
-  {
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-  	checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
-  }
+  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa))); 
 
   checkCublasStatus(cublasLtMatmulPreferenceCreate(&preference));
   checkCublasStatus(cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize))); 
@@ -174,13 +146,8 @@ int gemm_bias_lt(
   *
   **************************************************************************/
 template <typename T>
-int gemm_bias_gelu_lt(
-	    	cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, 
-	     	int m, int n, int k, const float *alpha,   
-	      	T A,  int lda, 
-	     	T B,  int ldb, 	const float *beta,
-	     	T C,  int64_t ldc, 
-	      	void *workspace,  size_t workspaceSize, cudaStream_t stream, 
+int gemm_bias_gelu_lt(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const float *alpha,   
+	      	T A, int lda, T B, int ldb, const float *beta, T C,  int64_t ldc, void *workspace,  size_t workspaceSize, cudaStream_t stream, 
 	     	bool use_bias,  const void* gelu_in, const void* bias) 
 {
   cublasLtMatmulDesc_t               operationDesc = NULL;
@@ -193,50 +160,45 @@ int gemm_bias_gelu_lt(
 
   // Create operation descriptor; see cublasLtMatmulDescAttributes_t for details about defaults; here we just set the 
   // transforms for A and B.
-  if ((std::is_same<T, at::Half>::value) || (std::is_same<T, float>::value))
-  {
-          checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+  if (std::is_same<T, at::BFloat16>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16BF, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16BF, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16BF, m, n, ldc));
   }
 
-  if (std::is_same<T, double>::value)
-  {
-          checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
-  }
-
-  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa))); 
-  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa))); 
-
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &gelu_in, sizeof(gelu_in)));
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD, &ldc, sizeof(ldc)));
-
-  if (use_bias) {
-      checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias))); 
-      epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS;
-  } 
-
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue))); 
-
-  // Create matrix descriptors. 
-  if (std::is_same<T, at::Half>::value)
-  {
+  if (std::is_same<T, at::Half>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
   }
 
-  if (std::is_same<T, float>::value)
-  {
+  if (std::is_same<T, float>::value)  {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
   }
 
-  if (std::is_same<T, double>::value)
-  {
+  if (std::is_same<T, double>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
         checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
   }
+
+  if (use_bias) {
+      checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bias, sizeof(bias))); 
+      epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS;
+  } 
+
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue))); 
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &gelu_in, sizeof(gelu_in)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD, &ldc, sizeof(ldc)));
+
 
   checkCublasStatus(cublasLtMatmulPreferenceCreate(&preference)); 
   checkCublasStatus(cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize))); 
@@ -259,13 +221,8 @@ int gemm_bias_gelu_lt(
   *
   **************************************************************************/
 template <typename T>
-int gemm_bgradb_lt(    
-	       	cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb,   
-	       	int m, int n, int k, const float *alpha, 
-	       	T A, int lda,    
-		T B, int ldb, const float *beta,
-	    	T C, int ldc,
-	    	void *workspace, size_t workspaceSize, 	cudaStream_t stream, 
+int gemm_bgradb_lt(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const float *alpha, 
+	       	T A, int lda, T B, int ldb, const float *beta, T C, int ldc, void *workspace, size_t workspaceSize, cudaStream_t stream, 
 	     	bool use_bias, 	const void* bgrad) 
 {
   cublasLtMatmulDesc_t             operationDesc = NULL;
@@ -307,13 +264,34 @@ int gemm_bgradb_lt(
    */
 
   // Create operation descriptor.
-  if ((std::is_same<T, at::Half>::value) || (std::is_same<T, float>::value))   {
-          checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+  if (std::is_same<T, at::BFloat16>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16BF, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16BF, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16BF, m, n, ldc));
   }
 
-  if (std::is_same<T, double>::value)   {
-          checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
+  if (std::is_same<T, at::Half>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
   }
+
+  if (std::is_same<T, float>::value)  {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
+  }
+
+  if (std::is_same<T, double>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
+  }
+
   /*
    hipblasLtMatmulDescSetAttribute()
    hipblasStatus_t hipblasLtMatmulDescSetAttribute(
@@ -383,9 +361,6 @@ int gemm_bgradb_lt(
        HIPBLASLT_EPILOGUE_BGRADB          Apply bias gradient to B and output gemm result.
    */
 
-  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
-  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa))); 
-
   if (use_bias) {
     // Bias or Bias gradient vector pointer in the device memory.
     checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bgrad, sizeof(bgrad))); 
@@ -394,7 +369,9 @@ int gemm_bgradb_lt(
     epilogue = HIPBLASLT_EPILOGUE_BGRADB; 
   } 
 
-  checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc,  CUBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue))); 
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue))); 
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa)));
 
   // Create matrix descriptors. Not setting any extra attributes.
   /*
@@ -413,26 +390,6 @@ int gemm_bgradb_lt(
        HIPBLAS_STATUS_SUCCESS      – If the descriptor was created successfully.
        HIPBLAS_STATUS_ALLOC_FAILED – If the memory could not be allocated.
   */
-  if (std::is_same<T, at::Half>::value)
-  {
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
-  }
-
-  if (std::is_same<T, float>::value)
-  {
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
-  }
-
-  if (std::is_same<T, double>::value)
-  {
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
-  }
 
   /*
    hipblasLtMatmulPreferenceCreate()
@@ -564,13 +521,8 @@ int gemm_bgradb_lt(
   *
   **************************************************************************/
 template <typename T>
-int gemm_dgelu_bgradb_lt(    
-		cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb,    
-		int m,  int n,  int k,   const float *alpha, 
-		T A,   int lda,   
-	       	T B,   int ldb,  const float *beta,     
-		T C,   int64_t ldc,    
-		void *workspace, size_t workspaceSize, 	cudaStream_t stream,   
+int gemm_dgelu_bgradb_lt(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int m,  int n,  int k,   const float *alpha, 
+		T A, int lda, T B, int ldb, const float *beta, T C, int64_t ldc, void *workspace, size_t workspaceSize, cudaStream_t stream,   
 	       	const void *gelu_in, const void *bgrad) 
 {
 
@@ -584,20 +536,40 @@ int gemm_dgelu_bgradb_lt(
 
   // Create operation descriptor; see cublasLtMatmulDescAttributes_t for details about defaults; here we just set the transforms for
   // A and B.
-  checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc,       CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    if (std::is_same<T, at::BFloat16>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16BF, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16BF, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16BF, m, n, ldc));
+  }
+
+  if (std::is_same<T, at::Half>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_16F, m, n, ldc));
+  }
+
+  if (std::is_same<T, float>::value)  {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
+  }
+
+  if (std::is_same<T, double>::value) {
+        checkCublasStatus(cublasLtMatmulDescCreate( &operationDesc, CUBLAS_COMPUTE_64F, CUDA_R_64F));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_64F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_64F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+        checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_64F, m, n, ldc));
+  }
+
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa,       sizeof(transa)));
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb,       sizeof(transa)));
-
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_BIAS_POINTER, &bgrad,  sizeof(bgrad))); 
- 
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &gelu_in,  sizeof(gelu_in))); 
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ldc,      sizeof(ldc)));
   checkCublasStatus(cublasLtMatmulDescSetAttribute( operationDesc, CUBLASLT_MATMUL_DESC_EPILOGUE,             &epilogue, sizeof(epilogue))); 
-
-  // Create matrix descriptors. Not setting any extra attributes.
-  checkCublasStatus(cublasLtMatrixLayoutCreate( &Adesc, CUDA_R_16F, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda)); 
-  checkCublasStatus(cublasLtMatrixLayoutCreate( &Bdesc, CUDA_R_16F, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb)); 
-  checkCublasStatus(cublasLtMatrixLayoutCreate( &Cdesc, CUDA_R_16F,  m,  n,  ldc));
 
   checkCublasStatus(cublasLtMatmulPreferenceCreate( &preference)); 
   checkCublasStatus(cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize))); 
@@ -621,9 +593,7 @@ int gemm_dgelu_bgradb_lt(
   *
   **************************************************************************/
 template <typename T>
-int linear_bias_forward_cuda(
-		at::Tensor input, T *weight, 	      at::Tensor bias, 	 int in_features, 
-		int batch_size,   int out_features,   at::Tensor output, void *lt_workspace) 
+int linear_bias_forward_cuda(at::Tensor input, T *weight, at::Tensor bias, int in_features, int batch_size, int out_features, at::Tensor output, void *lt_workspace) 
 {
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
 
@@ -636,20 +606,9 @@ int linear_bias_forward_cuda(
 
 #if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11600 || defined(USE_ROCM)
      status = gemm_bias_lt(
-		  //cublasLtHandle_t ltHandle     cublasOperation_t transa,   cublasOperation_t transb,
-		    (cublasLtHandle_t)handle,     CUBLAS_OP_T,                CUBLAS_OP_N,
-
-		  //int m           int n,        int k,            const float *alpha,   T A,
-		    out_features,   batch_size,	  in_features,     &alpha,               weight,
-
-		  //int lda,        T B,                              int ldb,         const float *beta
-                    in_features,    input.data_ptr<T>(),              in_features,     &beta_zero,
-
-		  //T C                              int ldc          void *workspace  size_t workspaceSize
-                    output.data_ptr<T>(),            out_features,    lt_workspace,    1 << 22,
-
-		  //cudaStream_t stream    bool use_bias,   const void* bias
-                    stream,                true,            static_cast<const void*>(bias.data_ptr<T>()));
+		    (cublasLtHandle_t)handle, CUBLAS_OP_T, CUBLAS_OP_N, out_features, batch_size, in_features, 
+		    &alpha, weight, in_features, input.data_ptr<T>(), in_features, &beta_zero,  output.data_ptr<T>(),
+		    out_features, lt_workspace, 1 << 22, stream, true, static_cast<const void*>(bias.data_ptr<T>()));
 #endif  
     output.copy_(bias);
     if(status!=HIPBLAS_STATUS_SUCCESS)
@@ -662,17 +621,17 @@ int linear_bias_forward_cuda(
     }
     return status;
 }
-
+template int linear_bias_forward_cuda<at::BFloat16>(at::Tensor, at::BFloat16 *,  at::Tensor, int, int, int, at::Tensor, void *);
+template int linear_bias_forward_cuda<at::Half>    (at::Tensor, at::Half *,      at::Tensor, int, int, int, at::Tensor, void *);
+template int linear_bias_forward_cuda<float>       (at::Tensor, float *,         at::Tensor, int, int, int, at::Tensor, void *);
+template int linear_bias_forward_cuda<double>      (at::Tensor, double *,        at::Tensor, int, int, int, at::Tensor, void *);
   
 /****************************************************************************
   *
   *
   **************************************************************************/
 template <typename T>
-int linear_bias_backward_cuda(
-		T *input, T *weight, T *d_output,  int in_features,  int batch_size, 
-		int out_features,    T *d_weight,  T *d_bias,        T *d_input,  
-		void *lt_workspace) 
+int linear_bias_backward_cuda(T *input, T *weight, T *d_output,  int in_features,  int batch_size, int out_features, T *d_weight,  T *d_bias, T *d_input, void *lt_workspace) 
 {
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
 
@@ -690,8 +649,9 @@ int linear_bias_backward_cuda(
 		    in_features,                   out_features,   batch_size,	    &alpha,
 		    // A                            lda            B                ldb  
 		    input,        	 	   in_features,    d_output,	    out_features,
-		    // beta                        C               ldc
+		    // beta                        C               ldc              void *workspace
 		    &beta_zero,            	   d_weight,       in_features,	    lt_workspace,
+		    // size_t workspaceSize  cudaStream_t stream   bool use_bias,   const void* bias
 		    1 << 22,     		   stream,         true,	    static_cast<const void*>(d_bias));
 #endif
 
@@ -712,17 +672,17 @@ int linear_bias_backward_cuda(
     return status;
 
 }
-
+template int linear_bias_backward_cuda<at::BFloat16>(at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, int, int, int,  at::BFloat16 *, at::BFloat16 *,   at::BFloat16 *, void *);
+template int linear_bias_backward_cuda<at::Half>    (at::Half *,     at::Half *,     at::Half *,     int, int, int,  at::Half *,     at::Half *,       at::Half *,     void *);
+template int linear_bias_backward_cuda<float>       (float *,        float *,        float *,        int, int, int,  float *,        float *,          float *,        void *);
+template int linear_bias_backward_cuda<double>      (double *,       double *,       double *,       int, int, int,  double *,       double *,         double *,       void *);
 /****************************************************************************
   *
   *
   **************************************************************************/
 template <typename T>
-int linear_gelu_linear_forward_cuda(
-		T *input, 	T *weight1, 		T *bias1, 		T *weight2, 
-		T *bias2, 	int in_features, 	int hidden_features, 	int batch_size, 
-		int out_features, 	T *output1, 	T *output2, 		T *gelu_in, 
-		void *lt_workspace) 
+int linear_gelu_linear_forward_cuda(T *input, T *weight1, T *bias1, T *weight2, T *bias2, int in_features, int hidden_features, int batch_size, 
+		int out_features, T *output1, T *output2, T *gelu_in, void *lt_workspace) 
 {
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
 
@@ -752,19 +712,22 @@ int linear_gelu_linear_forward_cuda(
     return status;
 }
 
+template int linear_gelu_linear_forward_cuda<at::BFloat16>(at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, 
+		                                           int, int, int, int, at::BFloat16 *,  at::BFloat16 *,  at::BFloat16 *, void *);
+template int linear_gelu_linear_forward_cuda<at::Half>    (at::Half *,     at::Half *,     at::Half *,      at::Half *,      at::Half *,
+	                                                   int, int, int, int, at::Half *,      at::Half *,      at::Half *,     void *);
+template int linear_gelu_linear_forward_cuda<float>       (float *,        float *,        float *,         float *,          float *,
+                                                           int, int, int, int, float *,         float *,         float *,        void *);
+template int linear_gelu_linear_forward_cuda<double>      (double *,       double *,       double *,        double *,         double *,   
+	                                                   int, int, int, int,  double *,        double *,        double *,      void *);
 
 /****************************************************************************
   *
   *
   **************************************************************************/
 template <typename T>
-int linear_gelu_linear_backward_cuda(
-		T *input, 		T *gelu_in, 		T *output1, 
-		T *weight1, 		T *weight2, 		T *d_output1, 
-		T *d_output2, 		int in_features, 	int batch_size, 
-		int hidden_features, 	int out_features, 	T *d_weight1, 
-		T *d_weight2, 		T *d_bias1, 		T *d_bias2, 
-		T *d_input, 		void *lt_workspace) 
+int linear_gelu_linear_backward_cuda(T *input, T *gelu_in, T *output1, T *weight1, T *weight2, T *d_output1, T *d_output2, int in_features, int batch_size, 
+		int hidden_features, int out_features, T *d_weight1, T *d_weight2, T *d_bias1, T *d_bias2, T *d_input, 	void *lt_workspace) 
 {
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
 
@@ -772,123 +735,36 @@ int linear_gelu_linear_backward_cuda(
     cudaStream_t stream;
     cublasGetStream(handle, &stream);
 
-    const float alpha      = 1.0;
-    const float beta_zero  = 0.0;
-    const float beta_one   = 1.0;
+    const float alpha      = 1.0, beta_zero  = 0.0, beta_one   = 1.0;
     int         status     = HIPBLAS_STATUS_NOT_INITIALIZED;
 
 #if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11000 || defined(USE_ROCM)
     //wgrad for first gemm
-    status = gemm_bgradb_lt(
-		    (cublasLtHandle_t)handle,     CUBLAS_OP_N,		    CUBLAS_OP_T,
-		    hidden_features,              out_features,		    batch_size,
-		    &alpha,                       output1,  		    hidden_features,
-		    d_output2,                    out_features,		    &beta_zero, /* host pointer */
-		    d_weight2,                    hidden_features,  	    lt_workspace, 
-		    1 << 22,                      stream,   		    true,
-		    static_cast<const void*>(d_bias2));
+    status = gemm_bgradb_lt((cublasLtHandle_t)handle, CUBLAS_OP_N, CUBLAS_OP_T, hidden_features, out_features, batch_size, &alpha, output1, hidden_features,
+		            d_output2, out_features, &beta_zero, d_weight2, hidden_features, lt_workspace, 1 << 22, stream, true, static_cast<const void*>(d_bias2));
 
     //dgrad for second GEMM
-    status = gemm_dgelu_bgradb_lt(    
-		    (cublasLtHandle_t)handle,     CUBLAS_OP_N,    	    CUBLAS_OP_N,    
-		    hidden_features,              batch_size,    	    out_features,    
-		    &alpha,                       weight2,    		    hidden_features,    
-		    d_output2,                    out_features,    	    &beta_zero, /* host pointer */    
-		    d_output1,                    hidden_features,    	    lt_workspace,    
-		    1 << 22,    stream,           static_cast<const void*>(gelu_in),    
+    status = gemm_dgelu_bgradb_lt((cublasLtHandle_t)handle, CUBLAS_OP_N, CUBLAS_OP_N, hidden_features, batch_size, out_features, &alpha, weight2, hidden_features,    
+		    d_output2, out_features, &beta_zero, d_output1, hidden_features, lt_workspace, 1 << 22, stream, static_cast<const void*>(gelu_in),    
 		    static_cast<const void*>(d_bias1));
-
+#else
     //wgrad for the first GEMM    
-    status = gemm_bias(  
-		    handle, 		    CUBLAS_OP_N,      		    CUBLAS_OP_T,
-	      	    in_features,      	    hidden_features,	      	    batch_size,
-	      	    &alpha,  		    input,      	      	    in_features,
-	      	    d_output1,	      	    hidden_features, 	       	    &beta_zero,  
-		    d_weight1, 	       	    in_features);
+    status = gemm_bias( handle, CUBLAS_OP_N, CUBLAS_OP_T, in_features, hidden_features, batch_size, &alpha, input, in_features, d_output1, hidden_features, &beta_zero,  
+                        d_weight1, in_features);
 
     //dgrad for the first GEMM    
-    status = gemm_bias(      
-		    handle, 		    CUBLAS_OP_N,      		    CUBLAS_OP_N,      
-		    in_features,      	    batch_size,         	    hidden_features,      
-		    &alpha,      	    weight1,      		    in_features,      
-		    d_output1,      	    hidden_features,      	    &beta_zero,      
-		    d_input,      	    in_features);
+    status = gemm_bias(handle, CUBLAS_OP_N, CUBLAS_OP_N, in_features, batch_size, hidden_features, &alpha, weight1, in_features, d_output1, hidden_features, &beta_zero,      
+		       d_input, in_features);
 #endif
     return status;
 
 }
-    
-template int linear_bias_forward_cuda<float>(
-		at::Tensor input, 	float *weight, 		at::Tensor bias, 
-		int in_features, 	int batch_size, 	int out_features, 
-		at::Tensor output, 	void *lt_workspace);
 
-template int linear_bias_forward_cuda<double>(
-		at::Tensor input, 	double *weight, 	at::Tensor bias, 
-		int in_features, 	int batch_size, 	int out_features, 
-		at::Tensor output, 	void *lt_workspace);
-
-template int linear_bias_backward_cuda<at::Half>(
-		at::Half *input, 	at::Half *weight, 	at::Half *d_output, 
-		int in_features, 	int batch_size, 	int out_features, 
-		at::Half *d_weight, 	at::Half *d_bias, 	at::Half *d_input,  
-		void *lt_workspace) ;
-
-template int linear_bias_backward_cuda<float>(
-		float *input,    	float *weight, 		float *d_output, 
-		int in_features, 	int batch_size, 	int out_features, 
-		float *d_weight, 	float *d_bias, 		float *d_input,  
-		void *lt_workspace) ;
-
-template int linear_bias_backward_cuda<double>(
-		double *input, 		double *weight, 	double *d_output, 
-		int in_features, 	int batch_size, 	int out_features, 
-		double *d_weight, 	double *d_bias, 	double *d_input,  
-		void *lt_workspace) ;
-
-template int linear_gelu_linear_forward_cuda<at::Half>(
-		at::Half *input, 	at::Half *weight1, 	at::Half *bias1, 
-		at::Half *weight2, 	at::Half *bias2, 	int in_features, 
-		int hidden_features, 	int batch_size, 	int out_features, 
-		at::Half *output1, 	at::Half *output2, 	at::Half *gelu_in, 
-		void *lt_workspace) ;
-
-template int linear_gelu_linear_forward_cuda<float>(
-		float *input,     	float *weight1, 	float *bias1, 
-		float *weight2, 	float *bias2,           int in_features, 
-		int hidden_features, 	int batch_size, 	int out_features, 
-		float *output1, 	float *output2, 	float *gelu_in, 
-		void *lt_workspace);
-    
-template int linear_gelu_linear_forward_cuda<double>(
-		double *input, 		double *weight1, 	double *bias1, 
-		double *weight2, 	double *bias2, 		int in_features, 
-		int hidden_features, 	int batch_size, 	int out_features, 
-		double *output1, 	double *output2, 	double *gelu_in, 
-		void *lt_workspace) ;
-
-template int linear_gelu_linear_backward_cuda<at::Half>(
-		at::Half *input, 	at::Half *gelu_in, 	at::Half *output1, 
-		at::Half *weight1, 	at::Half *weight2, 	at::Half *d_output1, 		
-		at::Half *d_output2, 	int in_features, 	int batch_size, 
-		int hidden_features, 	int out_features, 	at::Half *d_weight1, 
-		at::Half *d_weight2, 	at::Half *d_bias1, 	at::Half *d_bias2, 
-		at::Half *d_input, 	void *lt_workspace);
-
-template int linear_gelu_linear_backward_cuda<float>(
-		float *input, 		float *gelu_in, 	float *output1, 
-		float *weight1, 	float *weight2, 	float *d_output1, 
-		float *d_output2, 	int in_features, 	int batch_size, 
-		int hidden_features, 	int out_features, 	float *d_weight1, 
-		float *d_weight2, 	float *d_bias1, 	float *d_bias2, 
-		float *d_input, 	void *lt_workspace);
-
-
-template int linear_gelu_linear_backward_cuda<double>(
-		double *input, 		double *gelu_in, 	double *output1, 
-		double *weight1, 	double *weight2, 	double *d_output1, 
-		double *d_output2, 	int in_features, 	int batch_size, 
-		int hidden_features, 	int out_features, 	double *d_weight1, 
-		double *d_weight2, 	double *d_bias1, 	double *d_bias2, 
-		double *d_input, 	void *lt_workspace);
-
+template int linear_gelu_linear_backward_cuda<at::BFloat16>(at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *, 
+		                                            int, int, int, int, at::BFloat16 *, at::BFloat16 *, at::BFloat16 *,  at::BFloat16 *, at::BFloat16 *,   void *);
+template int linear_gelu_linear_backward_cuda<at::Half>    (at::Half *,     at::Half *,     at::Half *,      at::Half *,     at::Half *,     at::Half *,     at::Half *, 
+		                                            int, int, int, int, at::Half *,      at::Half *,    at::Half *,      at::Half *,      at::Half *,   void *);
+template int linear_gelu_linear_backward_cuda<float>       (float *,        float *,        float *,          float *,        float *,       float *,         float *, 
+		                                            int, int, int, int, float *,         float *,       float *,         float *,          float *,   void *);
+template int linear_gelu_linear_backward_cuda<double>      (double *,       double *,       double *,         double *,       double *,       double *,        double *, 
+		                                            int, int, int, int,  double *,        double *,     double *,         double *,         double *,  void *);	

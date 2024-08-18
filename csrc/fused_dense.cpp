@@ -237,7 +237,6 @@ std::vector<at::Tensor> linear_gelu_linear_backward(
   auto d_output1 = at::empty({batch_size,       hidden_features}, input.type());
 
   //auto reserved_space = at::empty({reserved_size}, inputs[0].type());
-
   // allocate fixed 4MB workspace for cublaslt for now, and this gets at least 4 MB
   auto lt_workspace = at::empty({1 << 22}, input.type());
 
