@@ -329,7 +329,7 @@ if "--cuda_ext" in sys.argv:
 
         ext_modules.append(
             CUDAExtension(name='fused_dense_cuda',
-                          sources=['csrc/fused_dense.cpp',
+                          sources=['csrc/fused_dense_base.cpp',
                                    'csrc/fused_dense_cuda.cu'],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
                                               'nvcc':['-O3'] + version_dependent_macros}))
