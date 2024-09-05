@@ -20,16 +20,23 @@ class FusedDenseTest(common_utils.TestCase):
         os.environ["TORCH_ALLOW_TF32_CUBLAS_OVERRIDE"] = "0"
         torch.manual_seed(seed)
 
-        seq_length = 512
-        sequences  = 3
-        hidden_dim = 1024
+        # seq_length = 512
+        # sequences  = 3
+        # hidden_dim = 1024
 
+        seq_length = 4
+        sequences  = 3
+        hidden_dim = 8
+                                #  12 x 8 : A matrix
         ref_inputs = torch.randn(sequences*seq_length, hidden_dim, dtype=dtype, device=torch.device("cuda")).requires_grad_(True)
 
         tst_inputs = ref_inputs.clone().detach().requires_grad_(True)
 
-        dense = fused_dense.FusedDense(1024, 3072)
-
+        # dense = fused_dense.FusedDense(1024, 3072)
+                     # 8 X 24 : in_features, out_features
+        dense = fused_dense.FusedDense(8, 24)
+        # bias = 24
+        # Weight = 24 X 8
         dense.to(dtype=dtype)
 
         dense.cuda()
@@ -37,6 +44,7 @@ class FusedDenseTest(common_utils.TestCase):
         y_tst = dense(tst_inputs)
 
         y_ref = torch.matmul(ref_inputs, dense.weight.t())+dense.bias
+
         dy    = torch.randn_like(y_tst).to(dtype=dtype)
 
         y_tst.backward(dy)
@@ -51,8 +59,8 @@ class FusedDenseTest(common_utils.TestCase):
         torch.testing.assert_close(dx_ref, tst_inputs.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
         torch.testing.assert_close(db_ref, dense.bias.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
 
-    # @common_utils.parametrize("dtype", [torch.half, torch.float, torch.bfloat16])
-    @common_utils.parametrize("dtype", [torch.half])
+    @common_utils.parametrize("dtype", [torch.half, torch.float, torch.bfloat16])
+    # @common_utils.parametrize("dtype", [torch.half])
     def test_fused_dense(self, dtype):
         self._test_fused_dense(dtype)
 

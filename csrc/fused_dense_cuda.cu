@@ -96,21 +96,57 @@ uint64_t CUBLASLT_MATMUL_PREF_IMPL_MASK:               Numerical implementation 
          CUBLASLT_SEARCH_BEST_FIT:                     Request heuristics for the best algorithm for the given use case.
          CUBLASLT_SEARCH_LIMITED_BY_ALGO_ID:           Request heuristics only for the pre-configured algo id.
 
-lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
-computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
-alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
-A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
-Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
-D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
-Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
-algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL, 
-                                            an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
-workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
-workspaceSizeInBytes:            Input  ==> Size of the workspace.
-stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
 
 
+CUBLASLT_EPILOGUE_DEFAULT = 1                              No special postprocessing, just scale and quantize the results if necessary.
+CUBLASLT_EPILOGUE_RELU    = 2                              Apply ReLU point-wise transform to the results (x := max(x, 0)).
+CUBLASLT_EPILOGUE_RELU_AUX = 
+         CUBLASLT_EPILOGUE_RELU | 128                      Apply ReLU point-wise transform to the results (x := max(x, 0)). 
+                                                           This epilogue mode produces an extra output, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+CUBLASLT_EPILOGUE_BIAS    = 4                              Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed 
+                                                           (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the 
+							   final postprocessing.
+CUBLASLT_EPILOGUE_RELU_BIAS = 
+      CUBLASLT_EPILOGUE_RELU | CUBLASLT_EPILOGUE_BIAS      Apply bias and then ReLU transform.
+CUBLASLT_EPILOGUE_RELU_AUX_BIAS = 
+      CUBLASLT_EPILOGUE_RELU_AUX | CUBLASLT_EPILOGUE_BIAS  Apply bias and then ReLU transform. This epilogue mode produces an extra output, see 
+                                                           CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+CUBLASLT_EPILOGUE_DRELU = 8 | 128                          Apply ReLu gradient to matmul output. Store ReLu gradient in the output matrix. This epilogue mode requires an extra 
+                                                           input, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+CUBLASLT_EPILOGUE_DRELU_BGRAD = 
+      CUBLASLT_EPILOGUE_DRELU | 16                         Apply independently ReLu and Bias gradient to matmul output. Store ReLu gradient in the output matrix, 
+                                                           and Bias gradient in the bias buffer (see CUBLASLT_MATMUL_DESC_BIAS_POINTER). This epilogue mode requires an 
+							   extra input, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+CUBLASLT_EPILOGUE_GELU = 32                                Apply GELU point-wise transform to the results (x := GELU(x)).
+CUBLASLT_EPILOGUE_GELU_AUX = CUBLASLT_EPILOGUE_GELU | 128  Apply GELU point-wise transform to the results (x := GELU(x)). This epilogue mode outputs GELU input as a separate matrix 
+                                                           (useful for training). See CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
+CUBLASLT_EPILOGUE_GELU_BIAS = 
+      CUBLASLT_EPILOGUE_GELU | CUBLASLT_EPILOGUE_BIAS      Apply Bias and then GELU transform 4.
+
+CUBLASLT_EPILOGUE_GELU_AUX_BIAS = 
+      CUBLASLT_EPILOGUE_GELU_AUX | CUBLASLT_EPILOGUE_BIAS  Apply Bias and then GELU transform 4. This epilogue mode outputs GELU input as a separate matrix (useful for training). 
+                                                           See CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
+CUBLASLT_EPILOGUE_DGELU = 64 | 128                         Apply GELU gradient to matmul output. Store GELU gradient in the output matrix. This epilogue mode requires an extra 
+                                                           input, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
+CUBLASLT_EPILOGUE_DGELU_BGRAD = 
+      CUBLASLT_EPILOGUE_DGELU | 16                         Apply independently GELU and Bias gradient to matmul output. Store GELU gradient in the output matrix, and Bias gradient 
+                                                           in the bias buffer (see CUBLASLT_MATMUL_DESC_BIAS_POINTER). This epilogue mode requires an extra input, see 
+							   CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
+CUBLASLT_EPILOGUE_BGRADA = 256                             Apply Bias gradient to the input matrix A. The bias size corresponds to the number of rows of the matrix D. 
+                                                           The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see 
+							   CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
+
+CUBLASLT_EPILOGUE_BGRADB = 512                             Apply Bias gradient to the input matrix B. The bias size corresponds to the number of columns of the matrix D. 
+                                                           The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see 
+							   CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
 */
+
+
+
 int gemm_bias(
                 cublasHandle_t handle, cublasOperation_t transa,  cublasOperation_t transb, int m, int n, int k,
                 const float* alpha, double *A, int lda, double *B, int ldb, const float* beta, double *C, int ldc) {
@@ -164,12 +200,11 @@ int gemm_bias_lt(
                 cudaStream_t        stream, 
 		bool                use_bias)
 {
-
+   std::cout << "\n**************** gemm_bias_lt: enter **************** " << std::endl;
    hipDataType             dataType, desc_dataType;
    hipblasComputeType_t    computeType, desc_computeType;
 
-   // std::cout << "\nTensor-A: " << A << "\nTensor-B: " << B << "\nTensor-C: " << C << "\nTensor-Bias: " << bias << std::endl;
-
+   std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
 
    if (A.scalar_type() == c10::ScalarType::BFloat16) { 
 	   dataType         = HIP_R_16F; 	   computeType      = HIPBLAS_COMPUTE_32F; 
@@ -196,7 +231,6 @@ int gemm_bias_lt(
     hipblasLtMatrixLayout_t     matA, matB, matC;
     
     int       returnedAlgoCount = 0;
-    uint64_t  workspace_size    = 0;
  
     hipblasLtMatmulHeuristicResult_t heuristicResult = {}; 
 
@@ -258,10 +292,21 @@ int gemm_bias_lt(
       // Set Desc Bias Data Type
       // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &computeType,    sizeof(&computeType)));
       CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bias_data, sizeof(bias_data)));
+
+      /*
+       CUBLASLT_EPILOGUE_BIAS = 4  Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed 
+                                   (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the final postprocessing.
+      */
       epilogue = HIPBLASLT_EPILOGUE_BIAS;
     }
-  
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue))); 
+
+    /*
+    CUBLASLT_MATMUL_DESC_TRANSA: int32_t      Specifies the type of transformation operation that should be performed on matrix A. Default value is: CUBLAS_OP_N 
+                                              (i.e., non-transpose operation). See cublasOperation_t.
+    CUBLASLT_MATMUL_DESC_TRANSB: int32_t      Specifies the type of transformation operation that should be performed on matrix B. Default value is: CUBLAS_OP_N 
+                                              (i.e., non-transpose operation). See cublasOperation_t.
+    */
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,    &trans_a,   sizeof(trans_a)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,    &trans_b,   sizeof(trans_b))); 
 
@@ -271,35 +316,32 @@ int gemm_bias_lt(
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
 
-    if(returnedAlgoCount == 0) {
-        std::cerr << "No valid solution found!" << std::endl;
-        return HIPBLAS_STATUS_EXECUTION_FAILED;
-    }
+    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
 
+    /*
+     lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
+     computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
+     alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
+     A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
+     Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
+     D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
+     Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
+     algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL, 
+                                            an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
+     workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
+     workspaceSizeInBytes:            Input  ==> Size of the workspace.
+     stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
+    */
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, 
-			                  matmul, 
-					  alpha, 
-			                  A_data, 
-					  matA, 
-			                  B_data, 
-					  matB, 
-					  beta, 
-					  C_data, 
-					  matC, 
-					  D_data, 
-					  matC, 
-					  NULL, 
-					  d_workspace, 
-					  max_workspace_size, 
-					  stream));
+    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-
+  std::cout << "\n**************** gemm_bias_lt: exit ****************" << std::endl;
   return HIPBLAS_STATUS_SUCCESS;
 }
 
@@ -327,8 +369,8 @@ int gemm_bgradb_lt(
 {
    hipDataType             dataType, desc_dataType;
    hipblasComputeType_t    computeType, desc_computeType;
-
-   // std::cout << "\nTensor-A: " << A << "\nTensor-B: " << B << "\nTensor-C: " << C << "\nTensor-Bias: " << bias << std::endl;
+   std::cout << "\n**************** gemm_bgradb_lt: enter ****************" << std::endl;
+   std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-bgrad:\n" << bgrad << std::endl;
 
 
    if (A.scalar_type() == c10::ScalarType::BFloat16) {
@@ -356,7 +398,6 @@ int gemm_bgradb_lt(
     hipblasLtMatrixLayout_t     matA, matB, matC;
 
     int       returnedAlgoCount = 0;
-    uint64_t  workspace_size    = 0;
 
     hipblasLtMatmulHeuristicResult_t heuristicResult = {};
 
@@ -418,10 +459,21 @@ int gemm_bgradb_lt(
       // Set Desc Bias Data Type
       // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &computeType,    sizeof(&computeType)));
       CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bgrad_data, sizeof(bgrad_data)));
+      /*
+      CUBLASLT_EPILOGUE_BGRADB = 512    Apply Bias gradient to the input matrix B. The bias size corresponds to the number of columns of the matrix D.
+                                        The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see
+                                        CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
+      */
       epilogue = HIPBLASLT_EPILOGUE_BGRADB;
     }
-
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue)));
+
+    /*
+    CUBLASLT_MATMUL_DESC_TRANSA: int32_t      Specifies the type of transformation operation that should be performed on matrix A. Default value is: CUBLAS_OP_N 
+                                              (i.e., non-transpose operation). See cublasOperation_t.
+    CUBLASLT_MATMUL_DESC_TRANSB: int32_t      Specifies the type of transformation operation that should be performed on matrix B. Default value is: CUBLAS_OP_N 
+                                              (i.e., non-transpose operation). See cublasOperation_t.
+    */
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,    &trans_a,   sizeof(trans_a)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,    &trans_b,   sizeof(trans_b)));
 
@@ -431,41 +483,38 @@ int gemm_bgradb_lt(
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
 
-    if(returnedAlgoCount == 0) {
-        std::cerr << "No valid solution found!" << std::endl;
-        return HIPBLAS_STATUS_EXECUTION_FAILED;
-    }
+    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
 
+    /*
+     lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
+     computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
+     alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
+     A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
+     Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
+     D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
+     Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
+     algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL, 
+                                            an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
+     workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
+     workspaceSizeInBytes:            Input  ==> Size of the workspace.
+     stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
+    */
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle,
-                                          matmul,
-                                          alpha,
-                                          A_data,
-                                          matA,
-                                          B_data,
-                                          matB,
-                                          beta,
-                                          C_data,
-                                          matC,
-                                          D_data,
-                                          matC,
-                                          NULL,
-                                          d_workspace,
-                                          max_workspace_size,
-                                          stream));
+    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-bgrad:\n" << bgrad << std::endl;
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-
+  std::cout << "\n**************** gemm_bgradb_lt: exit ****************" << std::endl;
   return HIPBLAS_STATUS_SUCCESS;
 }
 
 
 /********************************************************************************************************************************************************
-  *
+  * gemm_bias_gelu_lt
   * 
   *
   *
@@ -518,15 +567,14 @@ int gemm_bias_gelu_lt(
     hipblasLtMatrixLayout_t     matA, matB, matC;
 
     int       returnedAlgoCount = 0;
-    uint64_t  workspace_size    = 0;
 
     hipblasLtMatmulHeuristicResult_t heuristicResult = {};
 
-    const void * A_data    = static_cast<const void*>(A.data_ptr());
-    const void * B_data    = static_cast<const void*>(B.data_ptr());
-    const void * C_data    = static_cast<const void*>(C.data_ptr());
-    void       * D_data    = static_cast<void*>(C.data_ptr());
-    const void * bias_data = static_cast<const void*>(bias.data_ptr());
+    const void * A_data       = static_cast<const void*>(A.data_ptr());
+    const void * B_data       = static_cast<const void*>(B.data_ptr());
+    const void * C_data       = static_cast<const void*>(C.data_ptr());
+    void       * D_data       = static_cast<void*>(C.data_ptr());
+    const void * bias_data    = static_cast<const void*>(bias.data_ptr());
     const void * gelu_in_data = static_cast<const void*>(gelu_in.data_ptr());
 
     /* cublasStatus_t
@@ -596,28 +644,9 @@ int gemm_bias_gelu_lt(
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
 
 
-    if(returnedAlgoCount == 0) {
-        std::cerr << "No valid solution found!" << std::endl;
-        return HIPBLAS_STATUS_EXECUTION_FAILED;
-    }
+    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
 
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle,
-                                          matmul,
-                                          alpha,
-                                          A_data,
-                                          matA,
-                                          B_data,
-                                          matB,
-                                          beta,
-                                          C_data,
-                                          matC,
-                                          D_data,
-                                          matC,
-                                          NULL,
-                                          d_workspace,
-                                          max_workspace_size,
-                                          stream));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
@@ -627,8 +656,6 @@ int gemm_bias_gelu_lt(
 
   return HIPBLAS_STATUS_SUCCESS;
 }
-
-
 /********************************************************************************************************************************************************
   * gemm_dgelu_bgradb_lt
   *
@@ -681,16 +708,14 @@ int gemm_dgelu_bgradb_lt(
     hipblasLtEpilogue_t         epilogue = HIPBLASLT_EPILOGUE_DGELU_BGRAD;
     hipblasLtMatrixLayout_t     matA, matB, matC;
 
-    int       returnedAlgoCount = 0;
-    uint64_t  workspace_size    = 0;
-
+    int                              returnedAlgoCount = 0;
     hipblasLtMatmulHeuristicResult_t heuristicResult = {};
 
-    const void * A_data    = static_cast<const void*>(A.data_ptr());
-    const void * B_data    = static_cast<const void*>(B.data_ptr());
-    const void * C_data    = static_cast<const void*>(C.data_ptr());
-    void       * D_data    = static_cast<void*>(C.data_ptr());
-    const void * bgrad_data = static_cast<const void*>(bgrad.data_ptr());
+    const void * A_data       = static_cast<const void*>(A.data_ptr());
+    const void * B_data       = static_cast<const void*>(B.data_ptr());
+    const void * C_data       = static_cast<const void*>(C.data_ptr());
+    void       * D_data       = static_cast<void*>(C.data_ptr());
+    const void * bgrad_data   = static_cast<const void*>(bgrad.data_ptr());
     const void * gelu_in_data = static_cast<const void*>(gelu_in.data_ptr());
 
     /* cublasStatus_t
@@ -754,29 +779,9 @@ int gemm_dgelu_bgradb_lt(
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
 
+    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
 
-    if(returnedAlgoCount == 0) {
-        std::cerr << "No valid solution found!" << std::endl;
-        return HIPBLAS_STATUS_EXECUTION_FAILED;
-    }
-
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle,
-                                          matmul,
-                                          alpha,
-                                          A_data,
-                                          matA,
-                                          B_data,
-                                          matB,
-                                          beta,
-                                          C_data,
-                                          matC,
-                                          D_data,
-                                          matC,
-                                          NULL,
-                                          d_workspace,
-                                          max_workspace_size,
-                                          stream));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
