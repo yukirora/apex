@@ -11,6 +11,7 @@
 #include <cuda_runtime.h>
 
 #include <rocblas/rocblas.h>
+#include <hipblaslt/hipblaslt.h>
 #include <hipblaslt/hipblaslt-ext.hpp>
 #if defined(CUBLAS_VERSION) && CUBLAS_VERSION >= 11000 || defined(USE_ROCM)
 #include <cublasLt.h>
@@ -55,6 +56,7 @@ inline void _checkCublasStatus(char const *function, char const *file, long line
 
 #define checkCublasStatus(status) _checkCublasStatus(__FUNCTION__, __FILE__, __LINE__, status)
 /*
+Ref: /var/lib/jenkins/pytorch/aten/src/ATen/hip/HIPBlas.cpp
       |   aType    |   bType    |   cType    |     computeType     |
       | ---------- | ---------- | ---------- | ------------------- |
       | HIP_R_16F  | HIP_R_16F  | HIP_R_16F  | HIPBLAS_COMPUTE_16F | Half
@@ -178,338 +180,383 @@ int gemm_bias(
   return cublasGemmEx(handle, transa, transb, m, n, k, alpha, A, CUDA_R_16BF, lda, B, CUDA_R_16BF, ldb,
                   beta,    C,  CUDA_R_16BF,  ldc,  CUBLAS_COMPUTE_32F,  CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 }
+
 /********************************************************************************************************************************************************
   *
+  * In the forward pass of a neural network layer, the input is multiplied by the weight  matrix, and an activation function is applied:
+  * Y = XW + b
+  * where X is the input matrix, W is the weight matrix, b is the bias, and Y is the output.
   *
-  *
+  * D = Epilogue{  alpha_s * (A * B) +  beta_s * C +  bias_vi } * scaleD_v
   *
   ******************************************************************************************************************************************************/
 int gemm_bias_lt(
-		cublasLtHandle_t    handle, 
-		cublasOperation_t   trans_a, 
-		cublasOperation_t   trans_b, 
-		int                 m,  int n,  int k,  
-		const float         *alpha,
-		const float         *beta,
-                at::Tensor          A, 
-		at::Tensor          B, 
-		at::Tensor          bias,
-		at::Tensor          C,
-		void                *d_workspace,  
-		size_t              max_workspace_size,
-                cudaStream_t        stream, 
-		bool                use_bias)
+                cublasOperation_t   trans_a,
+                cublasOperation_t   trans_b,
+                const float         *alpha,
+                const float         *beta,
+                at::Tensor          A,
+                at::Tensor          B,
+                at::Tensor          bias,
+                at::Tensor          C,
+                bool                use_bias)
 {
-   std::cout << "\n**************** gemm_bias_lt: enter **************** " << std::endl;
-   hipDataType             dataType, desc_dataType;
-   hipblasComputeType_t    computeType, desc_computeType;
 
-   std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+    hipDataType             dataType, desc_dataType;
+    hipblasComputeType_t    computeType, desc_computeType;
 
-   if (A.scalar_type() == c10::ScalarType::BFloat16) { 
-	   dataType         = HIP_R_16F; 	   computeType      = HIPBLAS_COMPUTE_32F; 
-	   desc_dataType    = HIP_R_32F;	   desc_computeType = HIPBLAS_COMPUTE_32F; 
+    if (A.scalar_type() == c10::ScalarType::BFloat16) {
+           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
+           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
 
-   }
-   if (A.scalar_type() == at::ScalarType::Half) { 
-	   dataType         = HIP_R_16F;	   computeType      = HIPBLAS_COMPUTE_32F;
-	   desc_dataType    = HIP_R_32F;	   desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-   
-   if (A.scalar_type() == at::ScalarType::Float) { 
-	   dataType         = HIP_R_32F;	   computeType      = HIPBLAS_COMPUTE_32F;
-	   desc_dataType    = HIP_R_32F;	   desc_computeType = HIPBLAS_COMPUTE_32F;
-   } 
-   if (A.scalar_type() == at::ScalarType::Double) { 
-	   dataType         = HIP_R_64F;	   computeType      = HIPBLAS_COMPUTE_64F;
-	   desc_dataType    = HIP_R_64F;	   desc_computeType = HIPBLAS_COMPUTE_64F;
-   } 
+    }
+    if (A.scalar_type() == at::ScalarType::Half) {
+           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
+           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
+    } 
 
-    hipblasLtMatmulDesc_t       matmul;
-    hipblasLtMatmulPreference_t pref;
-    hipblasLtEpilogue_t         epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
-    hipblasLtMatrixLayout_t     matA, matB, matC;
-    
-    int       returnedAlgoCount = 0;
- 
-    hipblasLtMatmulHeuristicResult_t heuristicResult = {}; 
+    if (A.scalar_type() == at::ScalarType::Float) {
+           dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
+           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
+    }
+    if (A.scalar_type() == at::ScalarType::Double) {
+           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_64F;
+           desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
+    }
 
-    const void * A_data    = static_cast<const void*>(A.data_ptr());
-    const void * B_data    = static_cast<const void*>(B.data_ptr());
-    const void * C_data    = static_cast<const void*>(C.data_ptr());
-    void       * D_data    = static_cast<void*>(C.data_ptr());
-    const void * bias_data = static_cast<const void*>(bias.data_ptr());
+    cudaStream_t stream;
+    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+    cublasGetStream(handle, &stream);
 
-    /* cublasStatus_t 
-       hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc, 
-                                 cublasComputeType_t   computeType, 
-				 cudaDataType_t        scaleType);
-       
-       This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
+    /* ============================================================================================
+     *   Matmul desc
+     */
+    hipblasLtMatmulDesc_t matmul   = nullptr;
 
-       matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-       computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-       scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-    */
+    /* cublasStatus_t  hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
+     *                                           cublasComputeType_t   computeType,
+     *                                           cudaDataType_t        scaleType);
+     *
+     * This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
+
+     * matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
+     * computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
+     * scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
+     */
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
 
-    /*  cublasStatus_t
-        cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-                                           cudaDataType type,
-                                           uint64_t rows,
-                                           uint64_t cols,
-                                           int64_t ld);
-        This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
 
-        matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-        type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-        rows, cols: Input  ==> Number of rows and columns of the matrix.
-        ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column. 
-	                       Thus ld >= m (number of rows).	
+    /* cublasStatus_t cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
+     *                                                cublasLtMatmulDescAttributes_t attr,
+     *                                                const void *buf,
+     *                                                size_t sizeInBytes);
+     *
+     * matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
+     * attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
+     * buf:         Input ==> The value to which the specified attribute should be set.
+     * sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
+     * Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
+    */
+    /*
+     * CUBLASLT_MATMUL_DESC_TRANSA/CUBLASLT_MATMUL_DESC_TRANSB: int32_t  
+     *
+     * Specifies the type of transformation operation that should be performed on matrix A/matrix B. 
+     * Default value is: CUBLAS_OP_N  (i.e., non-transpose operation).
     */
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? m : k, trans_a == CUBLAS_OP_N ? k : m, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? k : n, trans_b == CUBLAS_OP_N ? n : k, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, m, n, m));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(int32_t)));
 
-    /* cublasStatus_t 
-       cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-                                       cublasLtMatmulDescAttributes_t attr,
-                                       const void *buf,
-                                       size_t sizeInBytes);
 
-       matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-       attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-       buf:         Input ==> The value to which the specified attribute should be set.
-       sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-       Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */ 
+     /* ============================================================================================
+     *   Configure epilogue
+     */
 
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_A_EXT, &computeType, sizeof(computeType)));
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_B_EXT, &computeType, sizeof(computeType)));
+     hipblasLtEpilogue_t   epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
+   
+     auto   d_bias = static_cast<void *>(bias.data_ptr());
+     if ((use_bias) && (d_bias != nullptr)) {
+    /* CUBLASLT_EPILOGUE_BIAS  Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed
+     *                             (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the final postprocessing.
+    */
+        epilogue = HIPBLASLT_EPILOGUE_BIAS;
 
-    if (use_bias)  {
-      // Set Desc Bias Data Type
-      // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &computeType,    sizeof(&computeType)));
-      CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bias_data, sizeof(bias_data)));
 
-      /*
-       CUBLASLT_EPILOGUE_BIAS = 4  Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed 
-                                   (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the final postprocessing.
-      */
-      epilogue = HIPBLASLT_EPILOGUE_BIAS;
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,        &epilogue,  sizeof(epilogue)));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &dataType,  sizeof(&dataType)));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER,    &d_bias,     sizeof(void*)));
     }
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue))); 
+    
+    /* ============================================================================================
+     *   Matrix layout
+     */
+    hipblasLtMatrixLayout_t matA= nullptr, matB= nullptr, matC= nullptr;
 
-    /*
-    CUBLASLT_MATMUL_DESC_TRANSA: int32_t      Specifies the type of transformation operation that should be performed on matrix A. Default value is: CUBLAS_OP_N 
-                                              (i.e., non-transpose operation). See cublasOperation_t.
-    CUBLASLT_MATMUL_DESC_TRANSB: int32_t      Specifies the type of transformation operation that should be performed on matrix B. Default value is: CUBLAS_OP_N 
-                                              (i.e., non-transpose operation). See cublasOperation_t.
+    /*  cublasStatus_t  cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
+     *                                              cudaDataType           type,
+     *                                              uint64_t               rows,
+     *                                              uint64_t               cols,
+     *                                              int64_t                ld);
+     *  This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
+     *
+     *  matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
+     *  type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
+     *  rows, cols: Input  ==> Number of rows and columns of the matrix.
+     *  ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
+     *                         Thus ld >= m (number of rows).
     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,    &trans_a,   sizeof(trans_a)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,    &trans_b,   sizeof(trans_b))); 
+    int m = A.size(1);
+    int n = A.size(0);
+    int k = B.size(1);
 
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? k : m, trans_a == CUBLAS_OP_N ? m : k, k));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? m : n, trans_b == CUBLAS_OP_N ? n : m, m));
 
-    // Set User Preference attributes
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, k, n, k));
+
+    /* ============================================================================================
+     *   Algo Get Heuristic
+     */
+    hipblasLtMatmulPreference_t pref;
+    const int   request_solutions = 1;
+    int         returnedAlgoCount = 0;
+    uint64_t    workspace_size    = 0;
+    void*       workspace         = nullptr;
+    hipblasLtMatmulHeuristicResult_t heuristicResult[request_solutions];
+
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, request_solutions, heuristicResult, &returnedAlgoCount));
 
-    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
+    if(returnedAlgoCount == 0)  { std::cerr << "No valid solution found!" << std::endl; return 1;  }
 
-    /*
-     lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
-     computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
-     alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
-     A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
-     Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
-     D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
-     Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
-     algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL, 
-                                            an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
-     workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
-     workspaceSizeInBytes:            Input  ==> Size of the workspace.
-     stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
+    for(int i = 0; i < returnedAlgoCount; i++) { workspace_size = max(workspace_size, heuristicResult[i].workspaceSize); }
+
+    hipMalloc(&workspace, workspace_size);
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspace, sizeof(workspace_size)));
+
+    /* ============================================================================================
+     * Matmul 
+     *    lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
+     *    computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
+     *    alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
+     *    A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
+     *    Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
+     *    D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
+     *    Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
+     *    algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL,
+     *                                                an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
+     *    workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
+     *    workspaceSizeInBytes:            Input  ==> Size of the workspace.
+     *    stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
+ 
+    // std::cout << "\n========================\ngemm_bias_lt\n";
+    // std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+    // std::cout << "\n========================\n";
+    const void * d_a    = static_cast<const void*>(A.data_ptr());
+    const void * d_b    = static_cast<const void*>(B.data_ptr());
+          void * d_c    = static_cast<void *>(C.data_ptr());
 
-    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, d_b, matA, d_a, matB, beta,
+                                          static_cast<const void*>(d_c), matC, d_c, matC, &heuristicResult[0].algo, workspace, workspace_size, stream));
+
+    // std::cout << "\n========================\ngemm_bias_lt\n"; 
+    // std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+    // std::cout << "\n========================\n";
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-  std::cout << "\n**************** gemm_bias_lt: exit ****************" << std::endl;
-  return HIPBLAS_STATUS_SUCCESS;
+
+    return 0;
+
 }
 
 /********************************************************************************************************************************************************
-  *
-  *
-  *
-  *
+  * In the backward pass, we compute the gradients of the loss with respect to X, W, and b. The key matrix operations are:
+  *  1. Gradient of Input (dX): dX = dY ⋅ WT:    Pass `dY`  as matrix `A`, `W` as matrix `B`, and compute the result into `dX`.
+  *  2. Gradient of Weights (dW): dWi = XT ⋅ dY: Pass `X^T` as matrix `A` (or use cuBLAS `transpose` option), `dY` as matrix `B`, and compute the result into `dW`.
+  *  3. Gradient of Bias (db): db=sum(dY)
   ******************************************************************************************************************************************************/
 int gemm_bgradb_lt(
-                cublasLtHandle_t   handle,
                 cublasOperation_t  trans_a,
                 cublasOperation_t  trans_b,
-                int                m, int n, int k,
                 const float        *alpha,
                 const float        *beta,
                 at::Tensor         A,
                 at::Tensor         B,
+		at::Tensor         bias,
                 at::Tensor         C,
-                at::Tensor         bgrad,
-		void               *d_workspace,  
-		size_t             max_workspace_size,
-                cudaStream_t       stream,
                 bool               use_bias)
 {
-   hipDataType             dataType, desc_dataType;
-   hipblasComputeType_t    computeType, desc_computeType;
-   std::cout << "\n**************** gemm_bgradb_lt: enter ****************" << std::endl;
-   std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-bgrad:\n" << bgrad << std::endl;
+    hipDataType             dataType, desc_dataType;
+    hipblasComputeType_t    computeType, desc_computeType;
 
-
-   if (A.scalar_type() == c10::ScalarType::BFloat16) {
+    if (A.scalar_type() == c10::ScalarType::BFloat16) {
            dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
            desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
 
-   }
-   if (A.scalar_type() == at::ScalarType::Half) {
+    }
+    if (A.scalar_type() == at::ScalarType::Half) {
            dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
            desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
+    }
 
-   if (A.scalar_type() == at::ScalarType::Float) {
+    if (A.scalar_type() == at::ScalarType::Float) {
            dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
            desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-   if (A.scalar_type() == at::ScalarType::Double) {
-           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_32F;
+    }
+    if (A.scalar_type() == at::ScalarType::Double) {
+           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_64F;
            desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
-   }
+    }
 
-    hipblasLtMatmulDesc_t       matmul;
-    hipblasLtMatmulPreference_t pref;
-    hipblasLtEpilogue_t         epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
-    hipblasLtMatrixLayout_t     matA, matB, matC;
+    const void * d_a    = static_cast<const void*>(A.data_ptr());
+    const void * d_b    = static_cast<const void*>(B.data_ptr());
+          void * d_c    = static_cast<void *>(C.data_ptr());
 
-    int       returnedAlgoCount = 0;
+    int m = A.size(1);
+    int n = A.size(0);
+    int k = B.size(1);
 
-    hipblasLtMatmulHeuristicResult_t heuristicResult = {};
+    cudaStream_t stream;
+    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+    cublasGetStream(handle, &stream);
 
-    const void * A_data    = static_cast<const void*>(A.data_ptr());
-    const void * B_data    = static_cast<const void*>(B.data_ptr());
-    const void * C_data    = static_cast<const void*>(C.data_ptr());
-    void       * D_data    = static_cast<void*>(C.data_ptr());
-    const void * bgrad_data = static_cast<const void*>(bgrad.data_ptr());
+    /* ============================================================================================
+     *   Matmul desc
+     */
+    hipblasLtMatmulDesc_t matmul   = nullptr;
 
-    /* cublasStatus_t
-       hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
-                                 cublasComputeType_t   computeType,
-                                 cudaDataType_t        scaleType);
+    /* cublasStatus_t  hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
+     *                                           cublasComputeType_t   computeType,
+     *                                           cudaDataType_t        scaleType);
+     *
+     * This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
 
-       This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
-
-       matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-       computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-       scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-    */
+     * matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
+     * computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
+     * scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
+     */
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
 
-    /*  cublasStatus_t
-        cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-                                           cudaDataType type,
-                                           uint64_t rows,
-                                           uint64_t cols,
-                                           int64_t ld);
-        This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
-
-        matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-        type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-        rows, cols: Input  ==> Number of rows and columns of the matrix.
-        ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
-                               Thus ld >= m (number of rows).
+    /* cublasStatus_t cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
+     *                                                cublasLtMatmulDescAttributes_t attr,
+     *                                                const void *buf,
+     *                                                size_t sizeInBytes);
+     *
+     * matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
+     * attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
+     * buf:         Input ==> The value to which the specified attribute should be set.
+     * sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
+     * Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
+    */
+    /*
+     * CUBLASLT_MATMUL_DESC_TRANSA/CUBLASLT_MATMUL_DESC_TRANSB: int32_t
+     *
+     * Specifies the type of transformation operation that should be performed on matrix A/matrix B.
+     * Default value is: CUBLAS_OP_N  (i.e., non-transpose operation).
     */
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? m : k, trans_a == CUBLAS_OP_N ? k : m, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? k : n, trans_b == CUBLAS_OP_N ? n : k, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, m, n, m));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(int32_t)));
 
-    /* cublasStatus_t
-       cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-                                       cublasLtMatmulDescAttributes_t attr,
-                                       const void *buf,
-                                       size_t sizeInBytes);
 
-       matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-       attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-       buf:         Input ==> The value to which the specified attribute should be set.
-       sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-       Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */
+     /* ============================================================================================
+     *   Configure epilogue
+     */
 
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_A_EXT, &computeType, sizeof(computeType)));
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_B_EXT, &computeType, sizeof(computeType)));
-
-    if (use_bias)  {
-      // Set Desc Bias Data Type
-      // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &computeType,    sizeof(&computeType)));
-      CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bgrad_data, sizeof(bgrad_data)));
+     hipblasLtEpilogue_t   epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
+     auto   d_bias = static_cast<void *>(bias.data_ptr());
+     if ((use_bias) && (d_bias != nullptr)) {
       /*
       CUBLASLT_EPILOGUE_BGRADB = 512    Apply Bias gradient to the input matrix B. The bias size corresponds to the number of columns of the matrix D.
                                         The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see
                                         CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
       */
-      epilogue = HIPBLASLT_EPILOGUE_BGRADB;
+	    std::cout << " \nConfig epilogue\n" << std::endl;    
+        epilogue = HIPBLASLT_EPILOGUE_BGRADB;
+
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,        &epilogue,  sizeof(epilogue)));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &dataType,  sizeof(&dataType)));
+        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER,    &d_bias,     sizeof(void*)));
     }
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,  &epilogue,  sizeof(epilogue)));
 
-    /*
-    CUBLASLT_MATMUL_DESC_TRANSA: int32_t      Specifies the type of transformation operation that should be performed on matrix A. Default value is: CUBLAS_OP_N 
-                                              (i.e., non-transpose operation). See cublasOperation_t.
-    CUBLASLT_MATMUL_DESC_TRANSB: int32_t      Specifies the type of transformation operation that should be performed on matrix B. Default value is: CUBLAS_OP_N 
-                                              (i.e., non-transpose operation). See cublasOperation_t.
+    /* ============================================================================================
+     *   Matrix layout
+     */
+    hipblasLtMatrixLayout_t matA= nullptr, matB= nullptr, matC= nullptr;
+
+    /*  cublasStatus_t  cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
+     *                                              cudaDataType           type,
+     *                                              uint64_t               rows,
+     *                                              uint64_t               cols,
+     *                                              int64_t                ld);
+     *  This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
+     *
+     *  matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
+     *  type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
+     *  rows, cols: Input  ==> Number of rows and columns of the matrix.
+     *  ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
+     *                         Thus ld >= m (number of rows).
     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,    &trans_a,   sizeof(trans_a)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,    &trans_b,   sizeof(trans_b)));
 
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, k, m, k));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, m, n, m));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, k, n, k));
 
-    // Set User Preference attributes
+    /* ============================================================================================
+     *   Algo Get Heuristic
+     */
+    hipblasLtMatmulPreference_t pref;
+    const int   request_solutions = 1;
+    int         returnedAlgoCount = 0;
+    uint64_t    workspace_size    = 0;
+    void*       workspace         = nullptr;
+    hipblasLtMatmulHeuristicResult_t heuristicResult[request_solutions];
+
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, request_solutions, heuristicResult, &returnedAlgoCount));
 
-    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
+    if(returnedAlgoCount == 0)  { std::cerr << "No valid solution found!" << std::endl; return 1;  }
 
-    /*
-     lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
-     computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
-     alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
-     A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
-     Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
-     D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
-     Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
-     algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL, 
-                                            an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
-     workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
-     workspaceSizeInBytes:            Input  ==> Size of the workspace.
-     stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
+    for(int i = 0; i < returnedAlgoCount; i++) { workspace_size = max(workspace_size, heuristicResult[i].workspaceSize); }
+
+    hipMalloc(&workspace, workspace_size);
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspace, sizeof(workspace_size)));
+
+    /* ============================================================================================
+     * Matmul
+     *    lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
+     *    computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
+     *    alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
+     *    A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
+     *    Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
+     *    D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
+     *    Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
+     *    algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL,
+     *                                                an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
+     *    workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
+     *    workspaceSizeInBytes:            Input  ==> Size of the workspace.
+     *    stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
 
-    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-bgrad:\n" << bgrad << std::endl;
+    // std::cout << "\ngemm_bias_lt\n" << "Tensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, d_b, matA, d_a, matB, beta,
+                                          static_cast<const void*>(d_c), matC, d_c, matC, &heuristicResult[0].algo, workspace, workspace_size, stream));
+
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-  std::cout << "\n**************** gemm_bgradb_lt: exit ****************" << std::endl;
-  return HIPBLAS_STATUS_SUCCESS;
+
+    return 0;
+
 }
 
 
@@ -801,97 +848,61 @@ int linear_bias_forward_cuda(
 		at::Tensor  input, 
 		at::Tensor  weight, 
 		at::Tensor  bias,
-	        at::Tensor  output,	
-		int in_features, int batch_size, int out_features, 
-		void *lt_workspace)
+	        at::Tensor  output)
 {
     int         status = HIPBLAS_STATUS_NOT_INITIALIZED;
-    const float alpha  = 1.0, beta_zero = 0.0, beta_one  = 1.0;
+    const float alpha  = 1.0, beta = 0.0;
 
-    cudaStream_t stream;
-    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
-    cublasGetStream(handle, &stream); // Get the stream from cublas handle to reuse for biasReLU kernel.
+    status = gemm_bias_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, input, weight, bias, output, true);
 
-    std::cout << "Input dtype: "  << input.scalar_type() << std::endl;
-
-    status = gemm_bias_lt(
-                    (cublasLtHandle_t)handle, 
-		    CUBLAS_OP_T, 
-		    CUBLAS_OP_N, 
-		    out_features, batch_size, in_features,
-                    &alpha,
-		    &beta_zero,
-		    input,
-		    weight,
-		    bias, 
-		    output,
-		    lt_workspace, 
-		    1 << 22, 
-		    stream, 
-		    true);
     return status;
 }
-template int linear_bias_forward_cuda <at::BFloat16>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output, 
-		                                     int in_features, int batch_size, int out_features, void *lt_workspace);
-template int linear_bias_forward_cuda <at::Half>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output, 
-		                                     int in_features, int batch_size, int out_features, void *lt_workspace);
-template int linear_bias_forward_cuda <float>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output, 
-		                                     int in_features, int batch_size, int out_features, void *lt_workspace);
-template int linear_bias_forward_cuda <double>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output, 
-		                                     int in_features, int batch_size, int out_features, void *lt_workspace);
+template int linear_bias_forward_cuda <at::BFloat16>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
+template int linear_bias_forward_cuda <at::Half>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output);
+template int linear_bias_forward_cuda <float>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output);
+template int linear_bias_forward_cuda <double>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
 
 /****************************************************************************
-  *
-  *
-  **************************************************************************/
+ * In the backward pass, we compute the gradients of the loss with respect to input, weight, and bias.
+ * The key matrix operations are:
+ *  1. Gradient of Input   (dX): dX  = dY ⋅ WT: Pass `dY`  as matrix `A`, `W`  as matrix `B`, and compute the result into `dX`.
+ *  2. Gradient of Weights (dW): dW  = XT ⋅ dY: Pass `X^T` as matrix `A`  `dY` as matrix `B`, and compute the result into `dW`.
+ *  3. Gradient of Bias    (db): db=sum(dY)
+ *  
+ **************************************************************************/
 template <typename T>
 int linear_bias_backward_cuda(
 		at::Tensor    input, 
 		at::Tensor    weight, 
 		at::Tensor    d_output,  
-		int           in_features,  int batch_size, int out_features, 
 		at::Tensor    d_weight,  
 		at::Tensor    d_bias, 
-		at::Tensor    d_input, 
-		void          *lt_workspace)
+		at::Tensor    d_input)
 {
     int status = HIPBLAS_STATUS_NOT_INITIALIZED;
-    const float alpha = 1.0, beta_zero = 0.0, beta_one = 1.0;
+    const float alpha = 1.0, beta = 0.0;
 
-    cudaStream_t stream;
-    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle(); 
-    cublasGetStream(handle, &stream); // Get the stream from cublas handle to reuse for biasReLU kernel.
+    std::cout << "Input Size:"   << input.sizes()    << std::endl;
+    std::cout << "Weight Size:"  << weight.sizes()   << std::endl;
+    std::cout << "d_output Size" << d_output.sizes() << std::endl;
 
-    printf("linear_bias_backward_cuda:1 status=%d\n",status);
+    std::cout << "d_weight Size:"  << d_weight.sizes() << std::endl;
+    std::cout << "d_bias Size:"    << d_bias.sizes()   << std::endl;
+    std::cout << "d_input Size"    << d_input.sizes()  << std::endl;
+    // Gradient of Input (dX): dX  = dY ⋅ WT: Pass `dY`  as matrix `A`, `W`  as matrix `B`, and compute the result into `dX`.
+    status = gemm_bias_lt(   CUBLAS_OP_N,  CUBLAS_OP_N,   &alpha,  &beta, d_output, weight,  d_bias, d_input,  false);
 
-    status = gemm_bgradb_lt(
-                    (cublasLtHandle_t) handle, 
-		    CUBLAS_OP_N, 
-		    CUBLAS_OP_T, 
-		    in_features, out_features, batch_size, 
-		    &alpha,
-		    &beta_zero,
-                    input, 
-		    d_output, 
-		    d_weight, 
-		    d_bias,
-		    lt_workspace,
-                    1 << 22, 
-		    stream, 
-		    true);
+    std::cout << "\nfinding d_weight\n" << std::endl;
+    // dW  = XT ⋅ dY and db=sum(dY) 
+    status = gemm_bgradb_lt( CUBLAS_OP_T,  CUBLAS_OP_N,   &alpha,  &beta, input, d_output,  d_bias,  d_weight,  true);
 
     return status;
-
 }
 
-template int linear_bias_backward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight, at::Tensor d_output,  int in_features,  int batch_size, int out_features, 
-		                                     at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input, void *lt_workspace);
-template int linear_bias_backward_cuda<at::Half>(at::Tensor input, at::Tensor weight, at::Tensor d_output,  int in_features,  int batch_size, int out_features, 
-		                                     at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input, void *lt_workspace);
-template int linear_bias_backward_cuda<float>(at::Tensor input, at::Tensor weight, at::Tensor d_output,  int in_features,  int batch_size, int out_features, 
-		                                     at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input, void *lt_workspace);
-template int linear_bias_backward_cuda<double>(at::Tensor input, at::Tensor weight, at::Tensor d_output,  int in_features,  int batch_size, int out_features, 
-		                                     at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input, void *lt_workspace);
+template int linear_bias_backward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
+template int linear_bias_backward_cuda<at::Half>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
+template int linear_bias_backward_cuda<float>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
+template int linear_bias_backward_cuda<double>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
 /****************************************************************************
   *
   *
@@ -934,19 +945,14 @@ int linear_gelu_linear_forward_cuda(
 		    true);
 
     status = gemm_bias_lt(
-                    (cublasLtHandle_t)handle,   
 		    CUBLAS_OP_T,     
 		    CUBLAS_OP_N,       
-		    out_features, batch_size, hidden_features, 
 		    &alpha,
 	            &beta_zero,	    
 		    weight2,
 		    output1,
 	            bias2,	    
                     output2,                    
-		    lt_workspace,      
-		    1 << 22,
-                    stream,                     
 		    true);
     return status;
 }
@@ -989,19 +995,14 @@ int linear_gelu_linear_backward_cuda(
 
     //wgrad for first gemm
     status = gemm_bgradb_lt(
-		    (cublasLtHandle_t)handle, 
 		    CUBLAS_OP_N, 
 		    CUBLAS_OP_T, 
-		    hidden_features, out_features, batch_size, 
 		    &alpha,
 		    &beta_zero, 
 		    output1, 
                     d_output2, 
 		    d_weight2,
 		    d_bias2, 
-		    lt_workspace, 
-		    1 << 22, 
-		    stream, 
 		    true);
 
     //dgrad for second GEMM

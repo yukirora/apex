@@ -1,17 +1,31 @@
 from apex import fused_dense
 import torch
-h = torch.randn(3, 4, dtype=torch.float16, device='cuda')
-w = torch.rand(4, 3, dtype=torch.float16, device='cuda')
-b = torch.randn(4, dtype=torch.float16, device='cuda')
-c = fused_dense.fused_dense_function(h, w, b)
 
-h = torch.randn(3, 4, dtype=torch.float, device='cuda')
-w = torch.rand(4, 3, dtype=torch.float, device='cuda')
-b = torch.randn(4, dtype=torch.float, device='cuda')
-c = fused_dense.fused_dense_function(h, w, b)
+in_features  = 3
+out_features = 2
 
-h = torch.randn(3, 4, dtype=torch.bfloat16, device='cuda')
-w = torch.rand(4, 3, dtype=torch.bfloat16, device='cuda')
-b = torch.randn(4, dtype=torch.bfloat16, device='cuda')
-c = fused_dense.fused_dense_function(h, w, b)
+# I = torch.randn(in_features, out_features, dtype=torch.float, device='cuda')
+I = torch.tensor([[1., 2. , 3., 4.], 
+                  [1., 2. , 3., 4.],
+                  [1., 2. , 3., 4.],
+                  [1., 2. , 3., 4.],
+                  [1., 2. , 3., 4.]],dtype=torch.float, device='cuda')
 
+# W = torch.randn(out_features, in_features, dtype=torch.float, device='cuda')
+W = torch.tensor([[1., 2. , 3.],
+                  [1., 2. , 3.],
+                  [1., 2. , 3.],
+                  [1., 2. , 3.]],dtype=torch.float, device='cuda')
+
+b = torch.tensor([1.8597, 1.4086, 0.1826], dtype=torch.float, device='cuda')
+
+print("Torch-A:\n", I)
+print("Torch-B:\n", W)
+print("Torch-b:\n", b)
+
+C  = torch.matmul(I, W)+b
+print("Torch-C:\n", C)
+
+aC = fused_dense.fused_dense_function(I, W, b)
+print("Torch-aC:\n", aC)
+# torch.testing.assert_close(C,  aC,  atol=1e-3, rtol=1e-3, equal_nan=True)
