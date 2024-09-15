@@ -76,6 +76,10 @@ Ref: /var/lib/jenkins/pytorch/aten/src/ATen/hip/HIPBlas.cpp
 
 
 
+############################################################################################################################################
+#
+#							   
+############################################################################################################################################
 uint32_t CUBLASLT_MATMUL_PREF_SEARCH_MODE:             Search mode. See cublasLtMatmulSearch_t. Default is CUBLASLT_SEARCH_BEST_FIT.
 uint64_t CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES:     Maximum allowed workspace memory. Default is 0 (no workspace memory allowed).
 uint32_t CUBLASLT_MATMUL_PREF_REDUCTION_SCHEME_MASK:   Reduction scheme mask. See cublasLtReductionScheme_t. Only algorithm configurations 
@@ -100,26 +104,37 @@ uint64_t CUBLASLT_MATMUL_PREF_IMPL_MASK:               Numerical implementation 
 
 
 
+############################################################################################################################################
+#
+#							   
+############################################################################################################################################
 CUBLASLT_EPILOGUE_DEFAULT = 1                              No special postprocessing, just scale and quantize the results if necessary.
+
 CUBLASLT_EPILOGUE_RELU    = 2                              Apply ReLU point-wise transform to the results (x := max(x, 0)).
+
 CUBLASLT_EPILOGUE_RELU_AUX = 
          CUBLASLT_EPILOGUE_RELU | 128                      Apply ReLU point-wise transform to the results (x := max(x, 0)). 
                                                            This epilogue mode produces an extra output, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
 CUBLASLT_EPILOGUE_BIAS    = 4                              Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed 
                                                            (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the 
 							   final postprocessing.
 CUBLASLT_EPILOGUE_RELU_BIAS = 
       CUBLASLT_EPILOGUE_RELU | CUBLASLT_EPILOGUE_BIAS      Apply bias and then ReLU transform.
+      
 CUBLASLT_EPILOGUE_RELU_AUX_BIAS = 
       CUBLASLT_EPILOGUE_RELU_AUX | CUBLASLT_EPILOGUE_BIAS  Apply bias and then ReLU transform. This epilogue mode produces an extra output, see 
                                                            CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
 CUBLASLT_EPILOGUE_DRELU = 8 | 128                          Apply ReLu gradient to matmul output. Store ReLu gradient in the output matrix. This epilogue mode requires an extra 
                                                            input, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
 CUBLASLT_EPILOGUE_DRELU_BGRAD = 
       CUBLASLT_EPILOGUE_DRELU | 16                         Apply independently ReLu and Bias gradient to matmul output. Store ReLu gradient in the output matrix, 
                                                            and Bias gradient in the bias buffer (see CUBLASLT_MATMUL_DESC_BIAS_POINTER). This epilogue mode requires an 
 							   extra input, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
+
 CUBLASLT_EPILOGUE_GELU = 32                                Apply GELU point-wise transform to the results (x := GELU(x)).
+
 CUBLASLT_EPILOGUE_GELU_AUX = CUBLASLT_EPILOGUE_GELU | 128  Apply GELU point-wise transform to the results (x := GELU(x)). This epilogue mode outputs GELU input as a separate matrix 
                                                            (useful for training). See CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER of cublasLtMatmulDescAttributes_t.
 
@@ -145,6 +160,133 @@ CUBLASLT_EPILOGUE_BGRADA = 256                             Apply Bias gradient t
 CUBLASLT_EPILOGUE_BGRADB = 512                             Apply Bias gradient to the input matrix B. The bias size corresponds to the number of columns of the matrix D. 
                                                            The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see 
 							   CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
+
+############################################################################################################################################
+#
+#							   
+############################################################################################################################################
+CUBLASLT_MATMUL_DESC_COMPUTE_TYPE: int32_t                 Compute type. Defines the data type used for multiply and accumulate operations, and the accumulator during the matrix multiplication. See cublasComputeType_t.
+
+CUBLASLT_MATMUL_DESC_SCALE_TYPE: int32_t                   Scale type. Defines the data type of the scaling factors alpha and beta. The accumulator value and the value from matrix C are typically converted to scale 
+                                                           type before final scaling. The value is then converted from scale type to the type of matrix D before storing in memory. Default value is aligned with 
+							   CUBLASLT_MATMUL_DESC_COMPUTE_TYPE. See cudaDataType_t.
+
+CUBLASLT_MATMUL_DESC_POINTER_MODE: int32_t                 Specifies alpha and beta are passed by reference, whether they are scalars on the host or on the device, or device vectors. 
+                                                           Default value is: CUBLASLT_POINTER_MODE_HOST (i.e., on the host). See cublasLtPointerMode_t.
+
+CUBLASLT_MATMUL_DESC_TRANSA/TRANSB/TRANSB: int32_t         Specifies the type of transformation operation that should be performed on matrix A/B/C. 
+                                                           Default value is: CUBLAS_OP_N (i.e., non-transpose operation).
+
+CUBLASLT_MATMUL_DESC_FILL_MODE: int32_t                    Indicates whether the lower or upper part of the dense matrix was filled, and consequently should be used by the function. 
+                                                           Default value is: CUBLAS_FILL_MODE_FULL.See cublasFillMode_t.
+
+CUBLASLT_MATMUL_DESC_EPILOGUE: uint32_t                    Epilogue function. See cublasLtEpilogue_t. Default value is: CUBLASLT_EPILOGUE_DEFAULT.
+
+CUBLASLT_MATMUL_DESC_BIAS_POINTER: void * / const void *   Bias or Bias gradient vector pointer in the device memory. 
+                                                           > Input vector with length that matches the number of rows of matrix D when one of the following epilogues is used: 
+							     CUBLASLT_EPILOGUE_BIAS, CUBLASLT_EPILOGUE_RELU_BIAS, CUBLASLT_EPILOGUE_RELU_AUX_BIAS, CUBLASLT_EPILOGUE_GELU_BIAS, CUBLASLT_EPILOGUE_GELU_AUX_BIAS.
+                                                           > Output vector with length that matches the number of rows of matrix D when one of the following epilogues is used: 
+							     CUBLASLT_EPILOGUE_DRELU_BGRAD, CUBLASLT_EPILOGUE_DGELU_BGRAD, CUBLASLT_EPILOGUE_BGRADA.
+                                                           > Output vector with length that matches the number of columns of matrix D when one of the following epilogues is used: 
+							     CUBLASLT_EPILOGUE_BGRADB.
+       
+							   Bias vector elements are the same type as alpha and beta (see CUBLASLT_MATMUL_DESC_SCALE_TYPE in this table) when matrix D datatype 
+							   is CUDA_R_8I and same as matrix D datatype otherwise. See the datatypes table under cublasLtMatmul() for detailed mapping. Default value is: NULL.
+
+CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE: int64_t           Stride (in elements) to the next bias or bias gradient vector for strided batch operations. The default value is 0.
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER:                Pointer for epilogue auxiliary buffer.
+                    void * / const void                   > Output vector for ReLu bit-mask in forward pass when CUBLASLT_EPILOGUE_RELU_AUX or CUBLASLT_EPILOGUE_RELU_AUX_BIAS epilogue is used.
+                                                          > Input vector for ReLu bit-mask in backward pass when CUBLASLT_EPILOGUE_DRELU or CUBLASLT_EPILOGUE_DRELU_BGRAD epilogue is used.
+                                                          > Output of GELU input matrix in forward pass when CUBLASLT_EPILOGUE_GELU_AUX_BIAS epilogue is used.
+                                                          > Input of GELU input matrix for backward pass when CUBLASLT_EPILOGUE_DGELU or CUBLASLT_EPILOGUE_DGELU_BGRAD epilogue is used.
+                                                          For aux data type, see CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_DATA_TYPE. Routines that don’t dereference this pointer, like 
+							  cublasLtMatmulAlgoGetHeuristic() depend on its value to determine expected pointer alignment. Requires setting the 
+							  CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD attribute.
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD: int64_t             Leading dimension for epilogue auxiliary buffer. 
+                                                          > ReLu bit-mask matrix leading dimension in elements (i.e. bits) when CUBLASLT_EPILOGUE_RELU_AUX, CUBLASLT_EPILOGUE_RELU_AUX_BIAS, 
+							    CUBLASLT_EPILOGUE_DRELU_BGRAD, or CUBLASLT_EPILOGUE_DRELU_BGRAD epilogue is used. Must be divisible by 128 and be no less than the number of rows 
+							    in the output matrix.
+                                                          > GELU input matrix leading dimension in elements when CUBLASLT_EPILOGUE_GELU_AUX_BIAS, CUBLASLT_EPILOGUE_DGELU, or CUBLASLT_EPILOGUE_DGELU_BGRAD 
+							    epilogue used. Must be divisible by 8 and be no less than the number of rows in the output matrix.
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_BATCH_STRIDE: int64_t   Batch stride for epilogue auxiliary buffer.
+                                                          > ReLu bit-mask matrix batch stride in elements (i.e. bits) when CUBLASLT_EPILOGUE_RELU_AUX, CUBLASLT_EPILOGUE_RELU_AUX_BIAS or 
+							    CUBLASLT_EPILOGUE_DRELU_BGRAD epilogue is used. Must be divisible by 128.
+                                                          > GELU input matrix batch stride in elements when CUBLASLT_EPILOGUE_GELU_AUX_BIAS, CUBLASLT_EPILOGUE_DRELU, or CUBLASLT_EPILOGUE_DGELU_BGRAD 
+							    epilogue used. Must be divisible by 8.
+                                                          Default value: 0.
+
+CUBLASLT_MATMUL_DESC_ALPHA_VECTOR_BATCH_STRIDE: int64_t   Batch stride for alpha vector. Used together with CUBLASLT_POINTER_MODE_ALPHA_DEVICE_VECTOR_BETA_HOST when matrix D’s CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT 
+                                                          is greater than 1. If CUBLASLT_POINTER_MODE_ALPHA_DEVICE_VECTOR_BETA_ZERO is set then CUBLASLT_MATMUL_DESC_ALPHA_VECTOR_BATCH_STRIDE must be set to 0 
+							  as this mode doesn’t support batched alpha vector. Default value: 0.
+
+CUBLASLT_MATMUL_DESC_SM_COUNT_TARGET: int32_t             Number of SMs to target for parallel execution. Optimizes heuristics for execution on a different number of SMs when user expects a concurrent stream 
+                                                          to be using some of the device resources. Default value: 0.
+
+CUBLASLT_MATMUL_DESC_A_SCALE_POINTER: const void*         Device pointer to the scale factor value that converts data in matrix A to the compute data type range. The scaling factor must have the same type as 
+                                                          the compute type. If not specified, or set to NULL, the scaling factor is assumed to be 1. If set for an unsupported matrix data, scale, and compute 
+							  type combination, calling cublasLtMatmul() will return CUBLAS_INVALID_VALUE. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_B_SCALE_POINTER: const void*         Equivalent to CUBLASLT_MATMUL_DESC_A_SCALE_POINTER for matrix B. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_C_SCALE_POINTER: const void*         Equivalent to CUBLASLT_MATMUL_DESC_A_SCALE_POINTER for matrix C. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_D_SCALE_POINTER: const void*         Equivalent to CUBLASLT_MATMUL_DESC_A_SCALE_POINTER for matrix D. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_AMAX_D_POINTER: void*                Device pointer to the memory location that on completion will be set to the maximum of absolute values in the output matrix. The computed value has 
+                                                          the same type as the compute type. If not specified, or set to NULL, the maximum absolute value is not computed. If set for an unsupported matrix data, 
+							  scale, and compute type combination, calling cublasLtMatmul() will return CUBLAS_INVALID_VALUE. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_DATA_TYPE               The type of the data that will be stored in CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER. If unset (or set to the default value of -1), the data type is 
+              int32_t based on cudaDataType               set to be the output matrix element data type (DType) with some exceptions:
+                                                          > ReLu uses a bit-mask.
+                                                          > For FP8 kernels with an output type (DType) of CUDA_R_8F_E4M3, the data type can be set to a non-default value if:
+                                                          1. AType and BType are CUDA_R_8F_E4M3.
+                                                          2. Bias Type is CUDA_R_16F.
+                                                          3. CType is CUDA_R_16BF or CUDA_R_16F
+                                                          4. CUBLASLT_MATMUL_DESC_EPILOGUE is set to CUBLASLT_EPILOGUE_GELU_AUX
+
+                                                          When CType is CUDA_R_16BF, the data type may be set to CUDA_R_16BF or CUDA_R_8F_E4M3. When CType is CUDA_R_16F, the data type may be set to CUDA_R_16F. 
+							  Otherwise, the data type should be left unset or set to the default value of -1.
+
+                                                          If set for an unsupported matrix data, scale, and compute type combination, calling cublasLtMatmul() will return CUBLAS_INVALID_VALUE. Default value: -1
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_SCALE_POINTER: void *   Device pointer to the scaling factor value to convert results from compute type data range to storage data range in the auxiliary matrix that is set 
+                                                          via CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER. The scaling factor value must have the same type as the compute type. If not specified, or set to NULL, 
+							  the scaling factor is assumed to be 1. If set for an unsupported matrix data, scale, and compute type combination, calling cublasLtMatmul() will return 
+							  CUBLAS_INVALID_VALUE. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_AMAX_POINTER: void *    Device pointer to the memory location that on completion will be set to the maximum of absolute values in the buffer that is set via 
+                                                          CUBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER. The computed value has the same type as the compute type. If not specified, or set to NULL, 
+							  the maximum absolute value is not computed. If set for an unsupported matrix data, scale, and compute type combination, calling cublasLtMatmul() 
+	                                                  will return CUBLAS_INVALID_VALUE. Default value: NULL
+
+CUBLASLT_MATMUL_DESC_FAST_ACCUM: int8_t                   Flag for managing FP8 fast accumulation mode. When enabled, problem execution might be faster but at the cost of lower accuracy because intermediate 
+                                                          results will not periodically be promoted to a higher precision. Default value: 0 - fast accumulation mode is disabled
+
+CUBLASLT_MATMUL_DESC_BIAS_DATA_TYPE                       Type of the bias or bias gradient vector in the device memory. Bias case: see CUBLASLT_EPILOGUE_BIAS. If unset (or set to the default value of -1), 
+   int32_t based on cudaDataTypes                         are the same type as the elements of the output matrix (Dtype) with the following exceptions: IMMA kernels with 
+                                                          computeType=CUDA_R_32I and Ctype=CUDA_R_8I where the bias vector elements are the same type as alpha, beta (CUBLASLT_MATMUL_DESC_SCALE_TYPE=CUDA_R_32F)
+                                                          For FP8 kernels with an output type of CUDA_R_32F, CUDA_R_8F_E4M3 or CUDA_R_8F_E5M2. See cublasLtMatmul() for more details. Default value: -1
+
+CUBLASLT_MATMUL_DESC_ATOMIC_SYNC_IN_COUNTERS_POINTER      Pointer to a device array of input atomic counters consumed by a matmul. When a counter reaches zero, computation of the corresponding chunk of the 
+                                        int32_t *         output tensor is allowed to start. Default: NULL. See Atomics Synchronization.
+
+CUBLASLT_MATMUL_DESC_ATOMIC_SYNC_OUT_COUNTERS_POINTER     Pointer to a device array of output atomic counters produced by a matmul. A matmul kernel sets a counter to zero when the computations of the 
+                                        int32_t *         corresponding chunk of the output tensor have completed. All the counters must be initialized to 1 before a matmul kernel is run. Default: NULL. 
+							  See Atomics Synchronization.
+
+CUBLASLT_MATMUL_DESC_ATOMIC_SYNC_NUM_CHUNKS_D_ROWS        Number of atomic synchronization chunks in the row dimension of the output matrix D. Each chunk corresponds to a single atomic counter. Default: 0 
+                                        int32_t           (atomics synchronization disabled). See Atomics Synchronization.
+
+CUBLASLT_MATMUL_DESC_ATOMIC_SYNC_NUM_CHUNKS_D_COLS        Number of atomic synchronization chunks in the column dimension of the output matrix D. Each chunk corresponds to a single atomic counter. Default: 0 
+                                        int32_t           (atomics synchronization disabled). See Atomics Synchronization.
+############################################################################################################################################
+#
+#							   
+############################################################################################################################################
 */
 
 
@@ -181,6 +323,47 @@ int gemm_bias(
                   beta,    C,  CUDA_R_16BF,  ldc,  CUBLAS_COMPUTE_32F,  CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 }
 
+
+hipDataType get_dtype (at::Tensor A)
+{
+    hipDataType dataType;
+
+    if (A.scalar_type() == c10::ScalarType::BFloat16) {
+           dataType = HIP_R_16F;
+
+    }
+    if (A.scalar_type() == at::ScalarType::Half) {
+            dataType = HIP_R_16F; 
+    }
+
+    if (A.scalar_type() == at::ScalarType::Float) {
+           dataType = HIP_R_32F; 
+    }
+    if (A.scalar_type() == at::ScalarType::Double) {
+           dataType = HIP_R_64F;
+    }
+    // The E4M3 is mainly used for the weights, and the E5M2 is for the gradient.
+    if (A.scalar_type() == at::ScalarType::Float8_e5m2fnuz) {
+           dataType = HIP_R_8F_E5M2_FNUZ;
+    }
+    if (A.scalar_type() == at::ScalarType::Float8_e4m3fnuz) {
+           dataType = HIP_R_8F_E4M3_FNUZ;
+    }
+
+    /*
+     Ref. from torch/csrc/TypeInfo.cpp
+                  at::ScalarType::Float8_e5m2,                \
+                  at::ScalarType::Float8_e5m2fnuz,            \
+                  at::ScalarType::Float8_e4m3fn,              \
+                  at::ScalarType::Float8_e4m3fnuz,            \
+
+        torch/include/ATen/hip/tunable/GemmHipblaslt.h
+                 constexpr hipblasDatatype_t HipBlasDataTypeFor<c10::Float8_e4m3fnuz>() { return HIP_R_8F_E4M3_FNUZ; }
+                 constexpr hipblasDatatype_t HipBlasDataTypeFor<c10::Float8_e5m2fnuz>() { return HIP_R_8F_E5M2_FNUZ; }
+   */
+    return dataType;
+}
+
 /********************************************************************************************************************************************************
   *
   * In the forward pass of a neural network layer, the input is multiplied by the weight  matrix, and an activation function is applied:
@@ -190,130 +373,135 @@ int gemm_bias(
   * D = Epilogue{  alpha_s * (A * B) +  beta_s * C +  bias_vi } * scaleD_v
   *
   ******************************************************************************************************************************************************/
-int gemm_bias_lt(
-                cublasOperation_t   trans_a,
-                cublasOperation_t   trans_b,
-                const float         *alpha,
-                const float         *beta,
-                at::Tensor          A,
-                at::Tensor          B,
-                at::Tensor          bias,
-                at::Tensor          C,
-                bool                use_bias)
+int gemm_lt(
+           cublasOperation_t   trans_a,
+           cublasOperation_t   trans_b,
+           const float         *alpha,
+           const float         *beta,
+           at::Tensor          A,
+           at::Tensor          B,
+           at::Tensor          C,
+           at::Tensor          bias,
+           at::Tensor          gelu,
+           bool                use_bias,
+	   bool                use_grad,
+	   bool                use_gelu)
 {
-
-    hipDataType             dataType, desc_dataType;
-    hipblasComputeType_t    computeType, desc_computeType;
-
-    if (A.scalar_type() == c10::ScalarType::BFloat16) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-
-    }
-    if (A.scalar_type() == at::ScalarType::Half) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-    } 
-
-    if (A.scalar_type() == at::ScalarType::Float) {
-           dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-    }
-    if (A.scalar_type() == at::ScalarType::Double) {
-           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_64F;
-           desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
-    }
-
     cudaStream_t stream;
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
     cublasGetStream(handle, &stream);
 
+    hipDataType dtype_a    = get_dtype(A);
+    hipDataType dtype_b    = get_dtype(B);
+    hipDataType dtype_c    = get_dtype(C);
+    hipDataType dtype_bias = get_dtype(bias);
+    hipDataType dtype_gelu = get_dtype(gelu);
+
+
+    const void * d_a    = static_cast<const void*>(A.data_ptr());
+    const void * d_b    = static_cast<const void*>(B.data_ptr());
+          void * d_c    = static_cast<void *>(C.data_ptr());
+    
+    auto   d_gelu       = static_cast<void *>(gelu.data_ptr());
+    auto   d_bias       = static_cast<void *>(bias.data_ptr());
+
+    hipblasLtEpilogue_t      epilogue   = HIPBLASLT_EPILOGUE_DEFAULT;
+    hipblasLtMatrixLayout_t  matA= nullptr, matB= nullptr, matC= nullptr;
+    hipblasLtMatmulDesc_t    matmulDesc = nullptr;
+
+    int64_t ld_gelu = (int64_t) C.size(0);
+
+    const int m = trans_a == CUBLAS_OP_T ? A.size(0) : A.size(1);
+    const int k = trans_a == CUBLAS_OP_T ? A.size(1) : A.size(0);
+    const int n = trans_b == CUBLAS_OP_T ? B.size(1) : B.size(0);
+
+    int lda, ldb, ldd;
+    if (trans_a ==CUBLAS_OP_T && trans_b == CUBLAS_OP_N) {  // TN
+        lda = k;
+        ldb = k;
+        ldd = m;
+    } else if (trans_a ==CUBLAS_OP_N && trans_b == CUBLAS_OP_N) {  // NN
+        lda = m;
+        ldb = k;
+        ldd = m;
+    } else if (trans_a ==CUBLAS_OP_N && trans_b == CUBLAS_OP_T) {  // NT
+        lda = m;
+        ldb = n;
+        ldd = m;
+    } 
+    else {  // TT
+        std::cout << "layout not allowed." << std::endl;
+    }
+
+    std::cout <<"lda: " << lda << "\tldb: " << ldb << "\tldd: " << ldd << std::endl;
+    std::cout <<"m: " << m << "\tn: " << n << "\tk: " << k << std::endl;
+
+    /* ============================================================================================
+     *   Matrix layout
+     Best combination yet 
+    int m = A.size(0);
+    int k = A.size(1);
+    int n = B.size(1);
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dtype_a, trans_a == CUBLAS_OP_N ? m : k, trans_a == CUBLAS_OP_N ? k : m, k));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dtype_b, trans_b == CUBLAS_OP_N ? k : n, trans_b == CUBLAS_OP_N ? n : k, n));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dtype_c, m, n, m));
+     */
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dtype_a, m , k, lda));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dtype_b, k,  n, ldb));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dtype_c, m,  n, ldd));
+
+   /*
+    hipblasLtOrder_t rowOrder = HIPBLASLT_ORDER_ROW;
+    hipblasLtOrder_t colOrder = HIPBLASLT_ORDER_COL;
+
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutSetAttribute(matA, HIPBLASLT_MATRIX_LAYOUT_ORDER, &colOrder, sizeof(colOrder)));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutSetAttribute(matB, HIPBLASLT_MATRIX_LAYOUT_ORDER, &colOrder, sizeof(colOrder)));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutSetAttribute(matC, HIPBLASLT_MATRIX_LAYOUT_ORDER, &rowOrder, sizeof(rowOrder)));
+    */
+    /* ============================================================================================
+    * default to 32F except for e5m2 inputs where the config is not supported
+    */
+    hipDataType desc_dataType=HIP_R_32F;
+    hipblasComputeType_t    computeType=HIPBLAS_COMPUTE_32F, desc_computeType=HIPBLAS_COMPUTE_32F;
+
+    if (A.scalar_type() == at::ScalarType::Double) {
+           computeType = HIPBLAS_COMPUTE_64F; desc_dataType = HIP_R_64F; desc_computeType = HIPBLAS_COMPUTE_64F;
+    }
+
     /* ============================================================================================
      *   Matmul desc
      */
-    hipblasLtMatmulDesc_t matmul   = nullptr;
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmulDesc, desc_computeType, desc_dataType));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmulDesc, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmulDesc, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(int32_t)));
 
-    /* cublasStatus_t  hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
-     *                                           cublasComputeType_t   computeType,
-     *                                           cudaDataType_t        scaleType);
-     *
-     * This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
-
-     * matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-     * computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-     * scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
-
-
-    /* cublasStatus_t cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-     *                                                cublasLtMatmulDescAttributes_t attr,
-     *                                                const void *buf,
-     *                                                size_t sizeInBytes);
-     *
-     * matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-     * attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-     * buf:         Input ==> The value to which the specified attribute should be set.
-     * sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-     * Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */
-    /*
-     * CUBLASLT_MATMUL_DESC_TRANSA/CUBLASLT_MATMUL_DESC_TRANSB: int32_t  
-     *
-     * Specifies the type of transformation operation that should be performed on matrix A/matrix B. 
-     * Default value is: CUBLAS_OP_N  (i.e., non-transpose operation).
-    */
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(int32_t)));
-
-
-     /* ============================================================================================
+    /* ============================================================================================
      *   Configure epilogue
      */
-
-     hipblasLtEpilogue_t   epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
-   
-     auto   d_bias = static_cast<void *>(bias.data_ptr());
-     if ((use_bias) && (d_bias != nullptr)) {
-    /* CUBLASLT_EPILOGUE_BIAS  Apply (broadcast) bias from the bias vector. Bias vector length must match matrix D rows, and it must be packed
-     *                             (such as stride between vector elements is 1). Bias vector is broadcast to all columns and added before applying the final postprocessing.
-    */
-        epilogue = HIPBLASLT_EPILOGUE_BIAS;
-
-
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,        &epilogue,  sizeof(epilogue)));
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &dataType,  sizeof(&dataType)));
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER,    &d_bias,     sizeof(void*)));
+    if (d_bias == nullptr) { use_bias=false; }  if (d_gelu == nullptr) { use_gelu=false; }
+  
+    if (use_bias && use_gelu) {
+         if (use_grad) {  epilogue = HIPBLASLT_EPILOGUE_DGELU_BGRAD;   } 
+         else          {  epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS; }
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &d_bias,   sizeof(d_bias)));
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &d_gelu,   sizeof(d_gelu)));
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ld_gelu,  sizeof(ld_gelu)));
+    } 
+    else if (use_bias) {
+         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_BGRADB; } 
+         else          { epilogue = HIPBLASLT_EPILOGUE_BIAS;   }
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &d_bias,     sizeof(d_bias)));
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,       &dtype_bias, sizeof(hipDataType)));
+    } 
+    else if (use_gelu) {
+         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_DGELU; } 
+	 else          { epilogue = HIPBLASLT_EPILOGUE_GELU_AUX; }
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &d_gelu,  sizeof(d_gelu)));
+         CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ld_gelu, sizeof(ld_gelu)));
     }
+  
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE, &epilogue,  sizeof(epilogue)));
     
-    /* ============================================================================================
-     *   Matrix layout
-     */
-    hipblasLtMatrixLayout_t matA= nullptr, matB= nullptr, matC= nullptr;
-
-    /*  cublasStatus_t  cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-     *                                              cudaDataType           type,
-     *                                              uint64_t               rows,
-     *                                              uint64_t               cols,
-     *                                              int64_t                ld);
-     *  This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
-     *
-     *  matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-     *  type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-     *  rows, cols: Input  ==> Number of rows and columns of the matrix.
-     *  ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
-     *                         Thus ld >= m (number of rows).
-    */
-    int m = A.size(1);
-    int n = A.size(0);
-    int k = B.size(1);
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? k : m, trans_a == CUBLAS_OP_N ? m : k, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? m : n, trans_b == CUBLAS_OP_N ? n : m, m));
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, k, n, k));
-
     /* ============================================================================================
      *   Algo Get Heuristic
      */
@@ -325,7 +513,7 @@ int gemm_bias_lt(
     hipblasLtMatmulHeuristicResult_t heuristicResult[request_solutions];
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, request_solutions, heuristicResult, &returnedAlgoCount));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmulDesc, matA, matB, matC, matC, pref, request_solutions, heuristicResult, &returnedAlgoCount));
 
     if(returnedAlgoCount == 0)  { std::cerr << "No valid solution found!" << std::endl; return 1;  }
 
@@ -336,507 +524,25 @@ int gemm_bias_lt(
 
     /* ============================================================================================
      * Matmul 
-     *    lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
-     *    computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
-     *    alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
-     *    A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
-     *    Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
-     *    D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
-     *    Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
-     *    algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL,
-     *                                                an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
-     *    workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
-     *    workspaceSizeInBytes:            Input  ==> Size of the workspace.
-     *    stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
     */
- 
-    // std::cout << "\n========================\ngemm_bias_lt\n";
-    // std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
-    // std::cout << "\n========================\n";
-    const void * d_a    = static_cast<const void*>(A.data_ptr());
-    const void * d_b    = static_cast<const void*>(B.data_ptr());
-          void * d_c    = static_cast<void *>(C.data_ptr());
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmulDesc, 
+			                  alpha, d_a, matA, 
+					         d_b, matB, beta,
+                                          static_cast<const void*>(d_c), matC, 
+					                           d_c,  matC, 
+					  &heuristicResult[0].algo, 
+					  workspace, workspace_size, 
+					  stream));
 
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, d_b, matA, d_a, matB, beta,
-                                          static_cast<const void*>(d_c), matC, d_c, matC, &heuristicResult[0].algo, workspace, workspace_size, stream));
-
-    // std::cout << "\n========================\ngemm_bias_lt\n"; 
-    // std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
-    // std::cout << "\n========================\n";
+    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmulDesc));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
 
     return 0;
-
-}
-
-/********************************************************************************************************************************************************
-  * In the backward pass, we compute the gradients of the loss with respect to X, W, and b. The key matrix operations are:
-  *  1. Gradient of Input (dX): dX = dY ⋅ WT:    Pass `dY`  as matrix `A`, `W` as matrix `B`, and compute the result into `dX`.
-  *  2. Gradient of Weights (dW): dWi = XT ⋅ dY: Pass `X^T` as matrix `A` (or use cuBLAS `transpose` option), `dY` as matrix `B`, and compute the result into `dW`.
-  *  3. Gradient of Bias (db): db=sum(dY)
-  ******************************************************************************************************************************************************/
-int gemm_bgradb_lt(
-                cublasOperation_t  trans_a,
-                cublasOperation_t  trans_b,
-                const float        *alpha,
-                const float        *beta,
-                at::Tensor         A,
-                at::Tensor         B,
-		at::Tensor         bias,
-                at::Tensor         C,
-                bool               use_bias)
-{
-    hipDataType             dataType, desc_dataType;
-    hipblasComputeType_t    computeType, desc_computeType;
-
-    if (A.scalar_type() == c10::ScalarType::BFloat16) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-
-    }
-    if (A.scalar_type() == at::ScalarType::Half) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-    }
-
-    if (A.scalar_type() == at::ScalarType::Float) {
-           dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-    }
-    if (A.scalar_type() == at::ScalarType::Double) {
-           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_64F;
-           desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
-    }
-
-    const void * d_a    = static_cast<const void*>(A.data_ptr());
-    const void * d_b    = static_cast<const void*>(B.data_ptr());
-          void * d_c    = static_cast<void *>(C.data_ptr());
-
-    int m = A.size(1);
-    int n = A.size(0);
-    int k = B.size(1);
-
-    cudaStream_t stream;
-    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
-    cublasGetStream(handle, &stream);
-
-    /* ============================================================================================
-     *   Matmul desc
-     */
-    hipblasLtMatmulDesc_t matmul   = nullptr;
-
-    /* cublasStatus_t  hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
-     *                                           cublasComputeType_t   computeType,
-     *                                           cudaDataType_t        scaleType);
-     *
-     * This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
-
-     * matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-     * computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-     * scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
-
-    /* cublasStatus_t cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-     *                                                cublasLtMatmulDescAttributes_t attr,
-     *                                                const void *buf,
-     *                                                size_t sizeInBytes);
-     *
-     * matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-     * attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-     * buf:         Input ==> The value to which the specified attribute should be set.
-     * sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-     * Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */
-    /*
-     * CUBLASLT_MATMUL_DESC_TRANSA/CUBLASLT_MATMUL_DESC_TRANSB: int32_t
-     *
-     * Specifies the type of transformation operation that should be performed on matrix A/matrix B.
-     * Default value is: CUBLAS_OP_N  (i.e., non-transpose operation).
-    */
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(int32_t)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(int32_t)));
-
-
-     /* ============================================================================================
-     *   Configure epilogue
-     */
-
-     hipblasLtEpilogue_t   epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
-     auto   d_bias = static_cast<void *>(bias.data_ptr());
-     if ((use_bias) && (d_bias != nullptr)) {
-      /*
-      CUBLASLT_EPILOGUE_BGRADB = 512    Apply Bias gradient to the input matrix B. The bias size corresponds to the number of columns of the matrix D.
-                                        The reduction happens over the GEMM’s “k” dimension. Store Bias gradient in the bias buffer, see
-                                        CUBLASLT_MATMUL_DESC_BIAS_POINTER of cublasLtMatmulDescAttributes_t.
-      */
-	    std::cout << " \nConfig epilogue\n" << std::endl;    
-        epilogue = HIPBLASLT_EPILOGUE_BGRADB;
-
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,        &epilogue,  sizeof(epilogue)));
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &dataType,  sizeof(&dataType)));
-        CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER,    &d_bias,     sizeof(void*)));
-    }
-
-    /* ============================================================================================
-     *   Matrix layout
-     */
-    hipblasLtMatrixLayout_t matA= nullptr, matB= nullptr, matC= nullptr;
-
-    /*  cublasStatus_t  cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-     *                                              cudaDataType           type,
-     *                                              uint64_t               rows,
-     *                                              uint64_t               cols,
-     *                                              int64_t                ld);
-     *  This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
-     *
-     *  matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-     *  type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-     *  rows, cols: Input  ==> Number of rows and columns of the matrix.
-     *  ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
-     *                         Thus ld >= m (number of rows).
-    */
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, k, m, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, m, n, m));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, k, n, k));
-
-    /* ============================================================================================
-     *   Algo Get Heuristic
-     */
-    hipblasLtMatmulPreference_t pref;
-    const int   request_solutions = 1;
-    int         returnedAlgoCount = 0;
-    uint64_t    workspace_size    = 0;
-    void*       workspace         = nullptr;
-    hipblasLtMatmulHeuristicResult_t heuristicResult[request_solutions];
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, request_solutions, heuristicResult, &returnedAlgoCount));
-
-    if(returnedAlgoCount == 0)  { std::cerr << "No valid solution found!" << std::endl; return 1;  }
-
-    for(int i = 0; i < returnedAlgoCount; i++) { workspace_size = max(workspace_size, heuristicResult[i].workspaceSize); }
-
-    hipMalloc(&workspace, workspace_size);
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspace, sizeof(workspace_size)));
-
-    /* ============================================================================================
-     * Matmul
-     *    lightHandle:                     Input  ==> Pointer to the allocated cuBLASLt handle for the cuBLASLt context. See cublasLtHandle_t.
-     *    computeDesc:                     Input  ==> Handle to a previously created matrix multiplication descriptor of type cublasLtMatmulDesc_t.
-     *    alpha, beta: Device/host memory: Input  ==> Pointers to the scalars used in the multiplication.
-     *    A, B, and C: Device memory:      Input  ==> Pointers to the GPU memory associated with the corresponding descriptors Adesc, Bdesc and Cdesc.
-     *    Adesc, Bdesc and Cdesc :         Input  ==> Handles to the previous created descriptors of the type cublasLtMatrixLayout_t.
-     *    D:           Device memory       Output ==> Pointer to the GPU memory associated with the descriptor Ddesc.
-     *    Ddesc:                           Input  ==> Handle to the previous created descriptor of the type cublasLtMatrixLayout_t.
-     *    algo:                            Input  ==> Handle for matrix multiplication algorithm to be used. See cublasLtMatmulAlgo_t. When NULL,
-     *                                                an implicit heuritics query with default search preferences will be performed to determine actual algorithm to use.
-     *    workspace: Device memory:               ==> Pointer to the workspace buffer allocated in the GPU memory. Must be 256B aligned (i.e. lowest 8 bits of address must be 0).
-     *    workspaceSizeInBytes:            Input  ==> Size of the workspace.
-     *    stream:      Host memory         Input  ==> The CUDA stream where all the GPU work will be submitted.
-    */
-
-    // std::cout << "\ngemm_bias_lt\n" << "Tensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, d_b, matA, d_a, matB, beta,
-                                          static_cast<const void*>(d_c), matC, d_c, matC, &heuristicResult[0].algo, workspace, workspace_size, stream));
-
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-
-    return 0;
-
-}
-
-
-/********************************************************************************************************************************************************
-  * gemm_bias_gelu_lt
-  * 
-  *
-  *
-  ******************************************************************************************************************************************************/
-int gemm_bias_gelu_lt(
-		cublasLtHandle_t     handle, 
-		cublasOperation_t    trans_a, 
-		cublasOperation_t    trans_b, 
-		int                  m, int n, int k, 
-		const float          *alpha,
-		const float          *beta,
-                at::Tensor           A,  
-		at::Tensor           B, 
-		at::Tensor           C,
-	        at::Tensor           gelu_in,
-	        at::Tensor           bias,  	
-		void                 *d_workspace,  
-		size_t               max_workspace_size, 
-		cudaStream_t         stream,
-                bool                 use_bias)
-{
-   hipDataType             dataType, desc_dataType;
-   hipblasComputeType_t    computeType, desc_computeType;
-
-   // std::cout << "\nTensor-A: " << A << "\nTensor-B: " << B << "\nTensor-C: " << C << "\nTensor-Bias: " << bias << std::endl;
-
-
-   if (A.scalar_type() == c10::ScalarType::BFloat16) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-
-   }
-   if (A.scalar_type() == at::ScalarType::Half) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-
-   if (A.scalar_type() == at::ScalarType::Float) {
-           dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-   if (A.scalar_type() == at::ScalarType::Double) {
-           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
-   }
-
-    hipblasLtMatmulDesc_t       matmul;
-    hipblasLtMatmulPreference_t pref;
-    hipblasLtEpilogue_t         epilogue = HIPBLASLT_EPILOGUE_DEFAULT;
-    hipblasLtMatrixLayout_t     matA, matB, matC;
-
-    int       returnedAlgoCount = 0;
-
-    hipblasLtMatmulHeuristicResult_t heuristicResult = {};
-
-    const void * A_data       = static_cast<const void*>(A.data_ptr());
-    const void * B_data       = static_cast<const void*>(B.data_ptr());
-    const void * C_data       = static_cast<const void*>(C.data_ptr());
-    void       * D_data       = static_cast<void*>(C.data_ptr());
-    const void * bias_data    = static_cast<const void*>(bias.data_ptr());
-    const void * gelu_in_data = static_cast<const void*>(gelu_in.data_ptr());
-
-    /* cublasStatus_t
-       hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
-                                 cublasComputeType_t   computeType,
-                                 cudaDataType_t        scaleType);
-
-       This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
-
-       matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-       computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-       scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-    */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
-
-    /*  cublasStatus_t
-        cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-                                           cudaDataType type,
-                                           uint64_t rows,
-                                           uint64_t cols,
-                                           int64_t ld);
-        This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
-
-        matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-        type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-        rows, cols: Input  ==> Number of rows and columns of the matrix.
-        ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
-                               Thus ld >= m (number of rows).
-    */
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? m : k, trans_a == CUBLAS_OP_N ? k : m, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? k : n, trans_b == CUBLAS_OP_N ? n : k, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, m, n, m));
-
-    /* cublasStatus_t
-       cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-                                       cublasLtMatmulDescAttributes_t attr,
-                                       const void *buf,
-                                       size_t sizeInBytes);
-
-       matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-       attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-       buf:         Input ==> The value to which the specified attribute should be set.
-       sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-       Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */
-
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_A_EXT, &computeType, sizeof(computeType)));
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_B_EXT, &computeType, sizeof(computeType)));
-
-    if (use_bias)  {
-      // Set Desc Bias Data Type
-      // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,  &computeType,    sizeof(&computeType)));
-      CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER, &bias_data, sizeof(bias_data)));
-      epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS;
-    }
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,             &epilogue,  sizeof(epilogue)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,               &trans_a,   sizeof(trans_a)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,               &trans_b,   sizeof(trans_b)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &gelu_in_data,   sizeof(gelu_in_data)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &m,         sizeof(m)));
-
-    // Set User Preference attributes
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
-
-
-    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-
-  return HIPBLAS_STATUS_SUCCESS;
-}
-/********************************************************************************************************************************************************
-  * gemm_dgelu_bgradb_lt
-  *
-  *
-  *
-  ******************************************************************************************************************************************************/
-int gemm_dgelu_bgradb_lt(
-		cublasLtHandle_t  handle, 
-		cublasOperation_t trans_a, 
-		cublasOperation_t trans_b, 
-		int               m,  int n,  int k,   
-		const float       *alpha,
-		const float       *beta,
-                at::Tensor        A, 
-		at::Tensor        B, 
-		at::Tensor        C,
-		at::Tensor        gelu_in,
-		at::Tensor        bgrad,
-		void              *d_workspace,  
-		size_t            max_workspace_size, 
-		cudaStream_t      stream)
-{
-   hipDataType             dataType, desc_dataType;
-   hipblasComputeType_t    computeType, desc_computeType;
-
-   // std::cout << "\nTensor-A: " << A << "\nTensor-B: " << B << "\nTensor-C: " << C << "\nTensor-Bias: " << bias << std::endl;
-
-
-   if (A.scalar_type() == c10::ScalarType::BFloat16) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-
-   }
-   if (A.scalar_type() == at::ScalarType::Half) {
-           dataType         = HIP_R_16F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-
-   if (A.scalar_type() == at::ScalarType::Float) {
-           dataType         = HIP_R_32F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_32F;           desc_computeType = HIPBLAS_COMPUTE_32F;
-   }
-   if (A.scalar_type() == at::ScalarType::Double) {
-           dataType         = HIP_R_64F;           computeType      = HIPBLAS_COMPUTE_32F;
-           desc_dataType    = HIP_R_64F;           desc_computeType = HIPBLAS_COMPUTE_64F;
-   }
-
-    hipblasLtMatmulDesc_t       matmul;
-    hipblasLtMatmulPreference_t pref;
-    hipblasLtEpilogue_t         epilogue = HIPBLASLT_EPILOGUE_DGELU_BGRAD;
-    hipblasLtMatrixLayout_t     matA, matB, matC;
-
-    int                              returnedAlgoCount = 0;
-    hipblasLtMatmulHeuristicResult_t heuristicResult = {};
-
-    const void * A_data       = static_cast<const void*>(A.data_ptr());
-    const void * B_data       = static_cast<const void*>(B.data_ptr());
-    const void * C_data       = static_cast<const void*>(C.data_ptr());
-    void       * D_data       = static_cast<void*>(C.data_ptr());
-    const void * bgrad_data   = static_cast<const void*>(bgrad.data_ptr());
-    const void * gelu_in_data = static_cast<const void*>(gelu_in.data_ptr());
-
-    /* cublasStatus_t
-       hipblasLtMatmulDescCreate(cublasLtMatmulDesc_t *matmulDesc,
-                                 cublasComputeType_t   computeType,
-                                 cudaDataType_t        scaleType);
-
-       This function creates a matrix multiply descriptor by allocating the memory needed to hold its opaque structure.
-
-       matmulDesc:  Output ==> Pointer to the structure holding the matrix multiply descriptor created by this function. See cublasLtMatmulDesc_t.
-       computeType: Input  ==> Enumerant that specifies the data precision for the matrix multiply descriptor this function creates. See cublasComputeType_t.
-       scaleType:   Input  ==> Enumerant that specifies the data precision for the matrix transform descriptor this function creates. See cudaDataType.
-    */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmul, desc_computeType, desc_dataType));
-
-    /*  cublasStatus_t
-        cublasLtMatrixLayoutCreate( cublasLtMatrixLayout_t *matLayout,
-                                           cudaDataType type,
-                                           uint64_t rows,
-                                           uint64_t cols,
-                                           int64_t ld);
-        This function creates a matrix layout descriptor by allocating the memory needed to hold its opaque structure.
-
-        matLayout:  Output ==> Pointer to the structure holding the matrix layout descriptor created by this function. See cublasLtMatrixLayout_t.
-        type:       Input  ==> Enumerant that specifies the data precision for the matrix layout descriptor this function creates. See cudaDataType.
-        rows, cols: Input  ==> Number of rows and columns of the matrix.
-        ld:         Input  ==> The leading dimension of the matrix. In column major layout, this is the number of elements to jump to reach the next column.
-                               Thus ld >= m (number of rows).
-    */
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dataType, trans_a == CUBLAS_OP_N ? m : k, trans_a == CUBLAS_OP_N ? k : m, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dataType, trans_b == CUBLAS_OP_N ? k : n, trans_b == CUBLAS_OP_N ? n : k, k));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dataType, m, n, m));
-
-    /* cublasStatus_t
-       cublasLtMatmulDescSetAttribute( cublasLtMatmulDesc_t matmulDesc,
-                                       cublasLtMatmulDescAttributes_t attr,
-                                       const void *buf,
-                                       size_t sizeInBytes);
-
-       matmulDesc:  Input ==> Pointer to the previously created structure holding the matrix multiply descriptor queried by this function. See cublasLtMatmulDesc_t.
-       attr:        Input ==> The attribute that will be set by this function. See cublasLtMatmulDescAttributes_t.
-       buf:         Input ==> The value to which the specified attribute should be set.
-       sizeInBytes: Input ==> Size of buf buffer (in bytes) for verification.
-       Ref: https://docs.nvidia.com/cuda/cublas/#cublasltmatmuldescattributes-t
-    */
-
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_A_EXT, &computeType, sizeof(computeType)));
-    // CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_COMPUTE_INPUT_TYPE_B_EXT, &computeType, sizeof(computeType)));
-
-      // Set Desc Bias Data Type
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSA,               &trans_a,     sizeof(trans_a)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_TRANSB,               &trans_b,     sizeof(trans_b)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &bgrad_data,  sizeof(bgrad_data)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &gelu_in_data,sizeof(gelu_in_data)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &m,           sizeof(m)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmul, HIPBLASLT_MATMUL_DESC_EPILOGUE,             &epilogue,    sizeof(epilogue)));
-
-    // Set User Preference attributes
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceCreate(&pref));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceSetAttribute(pref, HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &max_workspace_size, sizeof(max_workspace_size)));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulAlgoGetHeuristic(handle, matmul, matA, matB, matC, matC, pref, 1, &heuristicResult, &returnedAlgoCount));
-
-    if(returnedAlgoCount == 0) { std::cerr << "No valid solution found!" << std::endl; return HIPBLAS_STATUS_EXECUTION_FAILED;  }
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmul(handle, matmul, alpha, A_data, matA, B_data, matB, beta, C_data, matC, D_data, matC, NULL, d_workspace, max_workspace_size, stream));
-
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matC));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescDestroy(matmul));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatmulPreferenceDestroy(pref));
-
-  return HIPBLAS_STATUS_SUCCESS;
 }
 
 /****************************************************************************
@@ -853,11 +559,15 @@ int linear_bias_forward_cuda(
     int         status = HIPBLAS_STATUS_NOT_INITIALIZED;
     const float alpha  = 1.0, beta = 0.0;
 
-    status = gemm_bias_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, input, weight, bias, output, true);
+    at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+
+    status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, weight, input, output, bias, dummy_gelu, true, false, false);
 
     return status;
 }
 template int linear_bias_forward_cuda <at::BFloat16>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
+template int linear_bias_forward_cuda <c10::Float8_e5m2fnuz>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
+template int linear_bias_forward_cuda <c10::Float8_e4m3fnuz>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
 template int linear_bias_forward_cuda <at::Half>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output);
 template int linear_bias_forward_cuda <float>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output);
 template int linear_bias_forward_cuda <double>(at::Tensor  input, at::Tensor  weight, at::Tensor  bias, at::Tensor  output); 
@@ -882,24 +592,20 @@ int linear_bias_backward_cuda(
     int status = HIPBLAS_STATUS_NOT_INITIALIZED;
     const float alpha = 1.0, beta = 0.0;
 
-    std::cout << "Input Size:"   << input.sizes()    << std::endl;
-    std::cout << "Weight Size:"  << weight.sizes()   << std::endl;
-    std::cout << "d_output Size" << d_output.sizes() << std::endl;
+    at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-    std::cout << "d_weight Size:"  << d_weight.sizes() << std::endl;
-    std::cout << "d_bias Size:"    << d_bias.sizes()   << std::endl;
-    std::cout << "d_input Size"    << d_input.sizes()  << std::endl;
     // Gradient of Input (dX): dX  = dY ⋅ WT: Pass `dY`  as matrix `A`, `W`  as matrix `B`, and compute the result into `dX`.
-    status = gemm_bias_lt(   CUBLAS_OP_N,  CUBLAS_OP_N,   &alpha,  &beta, d_output, weight,  d_bias, d_input,  false);
+    status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, d_output, weight, d_input, d_bias, dummy_gelu, false, true, false);
 
-    std::cout << "\nfinding d_weight\n" << std::endl;
     // dW  = XT ⋅ dY and db=sum(dY) 
-    status = gemm_bgradb_lt( CUBLAS_OP_T,  CUBLAS_OP_N,   &alpha,  &beta, input, d_output,  d_bias,  d_weight,  true);
+    status = gemm_lt( CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta, input, d_output, d_weight, d_bias, dummy_gelu, true, true, false);
 
     return status;
 }
 
 template int linear_bias_backward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
+template int linear_bias_backward_cuda<c10::Float8_e5m2fnuz>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
+template int linear_bias_backward_cuda<c10::Float8_e4m3fnuz>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
 template int linear_bias_backward_cuda<at::Half>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
 template int linear_bias_backward_cuda<float>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
 template int linear_bias_backward_cuda<double>(at::Tensor input, at::Tensor weight, at::Tensor d_output, at::Tensor d_weight, at::Tensor d_bias, at::Tensor d_input);
@@ -926,7 +632,7 @@ int linear_gelu_linear_forward_cuda(
 
     const float alpha      = 1.0, beta_zero  = 0.0;
     int status  = HIPBLAS_STATUS_NOT_INITIALIZED;
-
+/*
     status = gemm_bias_gelu_lt(
                     (cublasLtHandle_t)handle,  
 		    CUBLAS_OP_T,     
@@ -954,6 +660,7 @@ int linear_gelu_linear_forward_cuda(
 	            bias2,	    
                     output2,                    
 		    true);
+*/		    
     return status;
 }
 template int linear_gelu_linear_forward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, 	at::Tensor bias2, 
@@ -992,7 +699,7 @@ int linear_gelu_linear_backward_cuda(
 
     const float alpha      = 1.0, beta_zero  = 0.0, beta_one   = 1.0;
     int status  = HIPBLAS_STATUS_NOT_INITIALIZED;
-
+/*
     //wgrad for first gemm
     status = gemm_bgradb_lt(
 		    CUBLAS_OP_N, 
@@ -1021,6 +728,7 @@ int linear_gelu_linear_backward_cuda(
 		    lt_workspace, 
 		    1 << 22, 
 		    stream);
+*/
     return status;
 }
 

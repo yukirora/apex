@@ -4,20 +4,23 @@ import torch
 in_features  = 3
 out_features = 2
 
+# tst_dtype = torch.float8_e5m2
+tst_dtype = torch.float16
+
 # I = torch.randn(in_features, out_features, dtype=torch.float, device='cuda')
 I = torch.tensor([[1., 2. , 3., 4.], 
                   [1., 2. , 3., 4.],
                   [1., 2. , 3., 4.],
                   [1., 2. , 3., 4.],
-                  [1., 2. , 3., 4.]],dtype=torch.float, device='cuda')
+                  [1., 2. , 3., 4.]],dtype=tst_dtype, device='cuda')
 
 # W = torch.randn(out_features, in_features, dtype=torch.float, device='cuda')
 W = torch.tensor([[1., 2. , 3.],
                   [1., 2. , 3.],
                   [1., 2. , 3.],
-                  [1., 2. , 3.]],dtype=torch.float, device='cuda')
+                  [1., 2. , 3.]],dtype=tst_dtype, device='cuda')
 
-b = torch.tensor([1.8597, 1.4086, 0.1826], dtype=torch.float, device='cuda')
+b = torch.tensor([1, 1, 1], dtype=tst_dtype, device='cuda')
 
 print("Torch-A:\n", I)
 print("Torch-B:\n", W)

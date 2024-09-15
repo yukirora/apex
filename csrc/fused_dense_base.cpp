@@ -72,6 +72,10 @@ at::Tensor linear_bias_forward(
 	   "linear_bias_forward", 
 	   [&]{ linear_bias_forward_cuda<scalar_t> ( input,  weight, bias, out); }
   );
+
+  // linear_bias_forward_cuda<c10::Float8_e5m2fnuz>(input, weight, bias, out);
+  // linear_bias_forward_cuda<c10::Float8_e4m3fnuz>(input, weight, bias, out);
+
   return {out};
 }
 
@@ -105,6 +109,11 @@ std::vector<at::Tensor> linear_bias_backward(
 	 "linear_bias_backward", 
 	 [&] { linear_bias_backward_cuda<scalar_t> (input, weight, d_output,  d_weight,  d_bias,  d_input); }
    );
+
+/*
+linear_bias_backward_cuda<c10::Float8_e5m2fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
+linear_bias_backward_cuda<c10::Float8_e4m3fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
+*/
   return {d_input, d_weight, d_bias};
 }
 
