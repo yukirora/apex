@@ -5,50 +5,22 @@
 #include <stdio.h>
 
 template <typename T>
-int linear_bias_forward_cuda(
-                at::Tensor  input,
-                at::Tensor  weight,
-                at::Tensor  bias,
-                at::Tensor  output);
+int linear_bias_forward_cuda(at::Tensor input, at::Tensor weight, at::Tensor bias, at::Tensor output);
 
 template <typename T>
-int linear_bias_backward_cuda(
-                at::Tensor    input,
-                at::Tensor    weight,
-                at::Tensor    d_output,
-                at::Tensor    d_weight,
-                at::Tensor    d_bias,
-                at::Tensor    d_input);
+int linear_bias_backward_cuda( at::Tensor    input,    at::Tensor    weight,  at::Tensor    d_output,
+                               at::Tensor    d_weight, at::Tensor    d_bias,  at::Tensor    d_input);
 
 template <typename T>
 int linear_gelu_linear_forward_cuda(
-                at::Tensor input,
-                at::Tensor weight1,
-                at::Tensor bias1,
-                at::Tensor weight2,
-                at::Tensor bias2,
-                int in_features, int hidden_features, int batch_size, int out_features,
-                at::Tensor output1,
-                at::Tensor output2,
-                at::Tensor gelu_in,
-                void *lt_workspace);
+                at::Tensor input,  at::Tensor weight1,  at::Tensor bias1,    at::Tensor weight2,
+                at::Tensor bias2,  at::Tensor output1,  at::Tensor output2,  at::Tensor gelu_in);
 
 template <typename T>
 int linear_gelu_linear_backward_cuda(
-                at::Tensor input,
-                at::Tensor gelu_in,
-                at::Tensor output1,
-                at::Tensor weight1,
-                at::Tensor weight2,
-                at::Tensor d_output1,
-                at::Tensor d_output2,
-                int in_features, int batch_size, int hidden_features, int out_features,
-                at::Tensor d_weight1,
-                at::Tensor d_weight2,
-                at::Tensor d_bias1,
-                at::Tensor d_bias2,
-                at::Tensor d_input,
-                void *lt_workspace);
+                at::Tensor input,     at::Tensor gelu_in,   at::Tensor output1,    at::Tensor weight1,
+                at::Tensor weight2,   at::Tensor d_output1, at::Tensor d_output2,  at::Tensor d_weight1,
+                at::Tensor d_weight2, at::Tensor d_bias1,   at::Tensor d_bias2,    at::Tensor d_input);
 
 
 
@@ -56,20 +28,13 @@ int linear_gelu_linear_backward_cuda(
  *
  *
  * ************************************************/
-at::Tensor linear_bias_forward(
-		at::Tensor input, 
-		at::Tensor weight, 
-		at::Tensor bias) 
+at::Tensor linear_bias_forward( at::Tensor input, at::Tensor weight, at::Tensor bias) 
 {
   auto out = at::zeros({input.size(0), weight.size(1)}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-  std::cout << "Input:\n" << input << "\nweight:\n" << weight << "\nbias:\n" << bias <<  std::endl;
+  // std::cout << "Input:\n" << input << "\nweight:\n" << weight << "\nbias:\n" << bias <<  std::endl;
 
-  AT_DISPATCH_FLOATING_TYPES_AND2 (
-	   at::ScalarType::Half, 
-	   at::ScalarType::BFloat16,
-	   input.scalar_type(), 
-	   "linear_bias_forward", 
+  AT_DISPATCH_FLOATING_TYPES_AND2 ( at::ScalarType::Half,  at::ScalarType::BFloat16, input.scalar_type(), "linear_bias_forward", 
 	   [&]{ linear_bias_forward_cuda<scalar_t> ( input,  weight, bias, out); }
   );
 
@@ -88,32 +53,21 @@ at::Tensor linear_bias_forward(
  *  3. Gradient of Bias    (db): db=sum(dY)
  *
  * ************************************************/
-std::vector<at::Tensor> linear_bias_backward( 
-		at::Tensor input, 
-		at::Tensor weight,  
-		at::Tensor d_output) 
+std::vector<at::Tensor> linear_bias_backward( at::Tensor input, at::Tensor weight,  at::Tensor d_output) 
 {
-  int batch_size    = input.size(0);
-  int in_features   = input.size(1);
-  int out_features  = weight.size(0);
 
-  // auto d_weight     = at::zeros({out_features, in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  auto d_weight     = at::zeros_like(weight);
-  auto d_input      = at::zeros({batch_size,   in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  auto d_bias       = at::zeros({batch_size}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto d_input   = at::zeros_like(input, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto d_weight  = at::zeros_like(weight, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto d_bias    = at::zeros(weight.size(1), torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-  AT_DISPATCH_FLOATING_TYPES_AND2 (
-	 at::ScalarType::Half, 
-	 at::ScalarType::BFloat16, 
-	 input.scalar_type(), 
-	 "linear_bias_backward", 
-	 [&] { linear_bias_backward_cuda<scalar_t> (input, weight, d_output,  d_weight,  d_bias,  d_input); }
-   );
+  AT_DISPATCH_FLOATING_TYPES_AND2 ( at::ScalarType::Half,  at::ScalarType::BFloat16,  input.scalar_type(),  "linear_bias_backward",
+        [&] { linear_bias_backward_cuda<scalar_t> (input, weight, d_output,  d_weight,  d_bias,  d_input); }
+  );
 
-/*
-linear_bias_backward_cuda<c10::Float8_e5m2fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
-linear_bias_backward_cuda<c10::Float8_e4m3fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
-*/
+ /*
+ linear_bias_backward_cuda<c10::Float8_e5m2fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
+ linear_bias_backward_cuda<c10::Float8_e4m3fnuz> (input, weight, d_output,  d_weight,  d_bias,  d_input);
+ */
   return {d_input, d_weight, d_bias};
 }
 
@@ -121,11 +75,8 @@ linear_bias_backward_cuda<c10::Float8_e4m3fnuz> (input, weight, d_output,  d_wei
  *
  *
  * ************************************************/
-std::vector<at::Tensor> linear_gelu_linear_forward(
-		at::Tensor input, 	at::Tensor weight1, 	at::Tensor bias1, 
-		at::Tensor weight2, 	at::Tensor bias2) 
+std::vector<at::Tensor> linear_gelu_linear_forward(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2) 
 {
-
   auto batch_size      = input.size(0);
   auto in_features     = input.size(1);
   int  hidden_features = weight1.size(0);
@@ -134,35 +85,16 @@ std::vector<at::Tensor> linear_gelu_linear_forward(
   //auto reserved_size = get_mlp_reserved_space(batch_size, num_layers, output_features.data());
 
   // create output/workspace tensor
-  auto output1      = at::empty({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type())); 
-  auto gelu_in      = at::empty({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  auto output2      = at::empty({batch_size, out_features},    torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  auto lt_workspace = at::empty({1 << 22}, input.scalar_type()); // allocate fixed 4MB workspace for cublaslt for now, and this gets at least 4 MB
+  auto output1      = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type())); 
+  auto gelu_in      = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto output2      = at::zeros({batch_size, out_features},    torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto lt_workspace = at::zeros({1 << 22}, input.scalar_type()); // allocate fixed 4MB workspace for cublaslt for now, and this gets at least 4 MB
 
   //auto reserved_space = at::empty({reserved_size}, inputs[0].type());
 
-  AT_DISPATCH_FLOATING_TYPES_AND2 (
-		  at::ScalarType::Half, 
-		  at::ScalarType::BFloat16, 
-		  input.scalar_type(), 
-		  "linear_gelu_linear_forward", 
-		  [&] {
-		       linear_gelu_linear_forward_cuda<scalar_t>(
-			       	       input,
-			       	       weight1,
-			       	       bias1,
-			       	       weight2,
-			       	       bias2,
-			       	       in_features,
-			       	       hidden_features,
-			       	       batch_size,
-			       	       out_features,
-			       	       output1,
-			       	       output2,
-			       	       gelu_in,
-				       (void*) (lt_workspace.data_ptr<scalar_t>()));
-                 }
-          );
+  AT_DISPATCH_FLOATING_TYPES_AND2 ( at::ScalarType::Half,  at::ScalarType::BFloat16,  input.scalar_type(), "linear_gelu_linear_forward", 
+	[&] { linear_gelu_linear_forward_cuda<scalar_t>(input, weight1, bias1, weight2, bias2, output1, output2, gelu_in); }
+  );
   return {output1, output2, gelu_in};
 }
 
@@ -180,7 +112,6 @@ std::vector<at::Tensor> linear_gelu_linear_backward(
 
   auto batch_size  = input.size(0);
   auto in_features = input.size(1);
-
   int hidden_features = weight1.size(0);
   int out_features    = weight2.size(0);
 
@@ -196,32 +127,9 @@ std::vector<at::Tensor> linear_gelu_linear_backward(
   auto lt_workspace = at::empty({1 << 22}, input.scalar_type()); // allocate fixed 4MB workspace for cublaslt for now, and this gets at least 4 MB
 
   //auto reserved_space = at::empty({reserved_size}, inputs[0].type());
-  AT_DISPATCH_FLOATING_TYPES_AND2(
-		  at::ScalarType::Half, 
-		  at::ScalarType::BFloat16, 
-		  input.scalar_type(), 
-		  "linear_gelu_linear_backward", 
-		  [&] {
-    		      linear_gelu_linear_backward_cuda<scalar_t>(
-        			input,
-        			gelu_in,
-        			output1,
-        			weight1,
-        			weight2,
-        			d_output1,
-        			d_output2,
-        			in_features,
-        			batch_size,
-        			hidden_features,
-        			out_features,
-        			d_weight1,
-        			d_weight2,
-        			d_bias1,
-        			d_bias2,
-        			d_input,
-        			(void*) (lt_workspace.data_ptr<scalar_t>())
-			);
-  		}
+  AT_DISPATCH_FLOATING_TYPES_AND2( at::ScalarType::Half,  at::ScalarType::BFloat16,  input.scalar_type(),  "linear_gelu_linear_backward", 
+	[&] { linear_gelu_linear_backward_cuda<scalar_t>(input, gelu_in, output1, weight1, weight2, d_output1, d_output2,
+        			d_weight1, d_weight2, d_bias1,	d_bias2, d_input);}
   );
   return {d_input, d_weight1, d_bias1, d_weight2, d_bias2};
 }

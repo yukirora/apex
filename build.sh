@@ -10,6 +10,6 @@ cp build/lib.linux-x86_64-cpython-39/fused_dense_cuda.cpython-39-x86_64-linux-gn
 
 # export HIPBLASLT_LOG_FILE=hipblaslt_bgrad.log
 
-# python apex/contrib/test/fused_dense/test_fused_dense_1.py
+python apex/contrib/test/fused_dense/test_fused_dense_1.py
 
-python apex/contrib/test/fused_dense/test_half.py
+# python apex/contrib/test/fused_dense/test_half.py

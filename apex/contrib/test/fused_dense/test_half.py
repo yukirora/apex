@@ -1,26 +1,18 @@
 from apex import fused_dense
 import torch
 
-in_features  = 3
-out_features = 2
+batch_size   = 5
+in_features  = 4
+out_features = 3
 
 # tst_dtype = torch.float8_e5m2
 tst_dtype = torch.float16
 
-# I = torch.randn(in_features, out_features, dtype=torch.float, device='cuda')
-I = torch.tensor([[1., 2. , 3., 4.], 
-                  [1., 2. , 3., 4.],
-                  [1., 2. , 3., 4.],
-                  [1., 2. , 3., 4.],
-                  [1., 2. , 3., 4.]],dtype=tst_dtype, device='cuda')
+I = torch.randn(batch_size, in_features, dtype=tst_dtype, device='cuda')
 
-# W = torch.randn(out_features, in_features, dtype=torch.float, device='cuda')
-W = torch.tensor([[1., 2. , 3.],
-                  [1., 2. , 3.],
-                  [1., 2. , 3.],
-                  [1., 2. , 3.]],dtype=tst_dtype, device='cuda')
+W = torch.randn(in_features, out_features, dtype=tst_dtype, device='cuda')
 
-b = torch.tensor([1, 1, 1], dtype=tst_dtype, device='cuda')
+b = torch.randn(out_features, dtype=tst_dtype, device='cuda')
 
 print("Torch-A:\n", I)
 print("Torch-B:\n", W)
@@ -31,4 +23,4 @@ print("Torch-C:\n", C)
 
 aC = fused_dense.fused_dense_function(I, W, b)
 print("Torch-aC:\n", aC)
-# torch.testing.assert_close(C,  aC,  atol=1e-3, rtol=1e-3, equal_nan=True)
+torch.testing.assert_close(C,  aC,  atol=1e-3, rtol=1e-3, equal_nan=True)

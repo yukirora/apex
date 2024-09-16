@@ -7,7 +7,7 @@ class FusedDenseFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, bias):
         ctx.save_for_backward(input, weight)
-        output = fused_dense_cuda.linear_bias_forward(input, weight, bias)
+        output = fused_dense_cuda.linear_bias_forward(input, weight, bias.t())
         return output
 
     @staticmethod
@@ -55,9 +55,9 @@ class FusedDense(nn.Module):
         super(FusedDense, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        self.weight = nn.Parameter(torch.randn(in_features, out_features))
         if bias:
-            self.bias = nn.Parameter(torch.empty(out_features))
+            self.bias = nn.Parameter(torch.randn(out_features))
         else:
             #assert False, "no-bias option not added yet"
             self.register_parameter('bias', None)

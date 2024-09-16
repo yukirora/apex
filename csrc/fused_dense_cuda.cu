@@ -366,11 +366,7 @@ hipDataType get_dtype (at::Tensor A)
 
 /********************************************************************************************************************************************************
   *
-  * In the forward pass of a neural network layer, the input is multiplied by the weight  matrix, and an activation function is applied:
-  * Y = XW + b
-  * where X is the input matrix, W is the weight matrix, b is the bias, and Y is the output.
-  *
-  * D = Epilogue{  alpha_s * (A * B) +  beta_s * C +  bias_vi } * scaleD_v
+  * D = Epilogue{  (alpha_s * (A * B) +  beta_s * C) +  bias_v } * scaleD_v
   *
   ******************************************************************************************************************************************************/
 int gemm_lt(
@@ -433,8 +429,7 @@ int gemm_lt(
         std::cout << "layout not allowed." << std::endl;
     }
 
-    std::cout <<"lda: " << lda << "\tldb: " << ldb << "\tldd: " << ldd << std::endl;
-    std::cout <<"m: " << m << "\tn: " << n << "\tk: " << k << std::endl;
+    // std::cout <<"lda: " << lda << "\tldb: " << ldb << "\tldd: " << ldd << "\tm: " << m << "\tk: " << k << "\tn: " << n << std::endl;
 
     /* ============================================================================================
      *   Matrix layout
@@ -488,7 +483,7 @@ int gemm_lt(
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ld_gelu,  sizeof(ld_gelu)));
     } 
     else if (use_bias) {
-         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_BGRADB; } 
+         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_BGRADA; } 
          else          { epilogue = HIPBLASLT_EPILOGUE_BIAS;   }
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &d_bias,     sizeof(d_bias)));
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,       &dtype_bias, sizeof(hipDataType)));
@@ -533,8 +528,8 @@ int gemm_lt(
 					  &heuristicResult[0].algo, 
 					  workspace, workspace_size, 
 					  stream));
-
-    std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
+    
+    // std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
 
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matA));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutDestroy(matB));
@@ -560,7 +555,7 @@ int linear_bias_forward_cuda(
     const float alpha  = 1.0, beta = 0.0;
 
     at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
+    //  y = torch.matmul(inputs, weight) + bias
     status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, weight, input, output, bias, dummy_gelu, true, false, false);
 
     return status;
@@ -594,11 +589,14 @@ int linear_bias_backward_cuda(
 
     at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-    // Gradient of Input (dX): dX  = dY ⋅ WT: Pass `dY`  as matrix `A`, `W`  as matrix `B`, and compute the result into `dX`.
-    status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, d_output, weight, d_input, d_bias, dummy_gelu, false, true, false);
+    // dW  = XT ⋅ dY and db=sum(dY)
+    status = gemm_lt( CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta, d_output, input, d_weight, d_bias, dummy_gelu, true, true, false);
+    // std::cout << "\ninput:\n" << input << "\nd_output:\n" << d_output <<  "\nd_weight: input x d_output: \n" << d_weight <<  std::endl;
 
-    // dW  = XT ⋅ dY and db=sum(dY) 
-    status = gemm_lt( CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta, input, d_output, d_weight, d_bias, dummy_gelu, true, true, false);
+    // std::cout << "\nd_output:\n" << weight << "\nweight:\n" << d_output <<  std::endl;
+    // dX  = dY ⋅ WT: (Transposed in Python layer before sending here) 
+    status = gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta, weight, d_output, d_input, d_bias, dummy_gelu, false, false, false);
+    // std::cout << "\nd_output:\n" << weight << "\nweight:\n" << d_output <<  "\nd_input: d_outputi x weight\n" << d_input <<  std::endl;
 
     return status;
 }
@@ -620,57 +618,31 @@ int linear_gelu_linear_forward_cuda(
 		at::Tensor bias1, 
 		at::Tensor weight2, 
 		at::Tensor bias2, 
-		int in_features, int hidden_features, int batch_size, int out_features, 
 		at::Tensor output1, 
 		at::Tensor output2, 
-		at::Tensor gelu_in, 
-		void *lt_workspace)
+		at::Tensor gelu_in)
 {
-    cudaStream_t stream;
-    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
-    cublasGetStream(handle, &stream);
+    auto batch_size      = input.size(0);
+    auto in_features     = input.size(1);
+    int  hidden_features = weight1.size(0);
+    int  out_features    = weight2.size(0);
+
+    at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
     const float alpha      = 1.0, beta_zero  = 0.0;
     int status  = HIPBLAS_STATUS_NOT_INITIALIZED;
-/*
-    status = gemm_bias_gelu_lt(
-                    (cublasLtHandle_t)handle,  
-		    CUBLAS_OP_T,     
-		    CUBLAS_OP_N,
-                    hidden_features, batch_size, in_features,        
-		    &alpha,
-		    &beta_zero,
-                    weight1,                   
-		    input, 
-                    output1,
-		    gelu_in,
-		    bias1,
-		    lt_workspace,
-                    1 << 22,                   
-		    stream,          
-		    true);
 
-    status = gemm_bias_lt(
-		    CUBLAS_OP_T,     
-		    CUBLAS_OP_N,       
-		    &alpha,
-	            &beta_zero,	    
-		    weight2,
-		    output1,
-	            bias2,	    
-                    output2,                    
-		    true);
-*/		    
+    status = gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta_zero, weight1, input,   output1, bias1,   gelu_in,    true, false, true);
+    status = gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta_zero, weight2, output1, bias2,   output2, dummy_gelu, true, false, false);
+
     return status;
 }
-template int linear_gelu_linear_forward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, 	at::Tensor bias2, 
-		int in_features, int hidden_features, int batch_size, int out_features, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in, void *lt_workspace);
-template int linear_gelu_linear_forward_cuda<at::Half>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, 	at::Tensor bias2, 
-		int in_features, int hidden_features, int batch_size, int out_features, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in, void *lt_workspace);
-template int linear_gelu_linear_forward_cuda<float>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, 	at::Tensor bias2, 
-		int in_features, int hidden_features, int batch_size, int out_features, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in, void *lt_workspace);
-template int linear_gelu_linear_forward_cuda<double>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, 	at::Tensor bias2, 
-		int in_features, int hidden_features, int batch_size, int out_features, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in, void *lt_workspace);
+template int linear_gelu_linear_forward_cuda<at::BFloat16>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
+template int linear_gelu_linear_forward_cuda<at::Half>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
+template int linear_gelu_linear_forward_cuda<c10::Float8_e5m2fnuz>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
+template int linear_gelu_linear_forward_cuda<c10::Float8_e4m3fnuz>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
+template int linear_gelu_linear_forward_cuda<float>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
+template int linear_gelu_linear_forward_cuda<double>(at::Tensor input, at::Tensor weight1, at::Tensor bias1, at::Tensor weight2, at::Tensor bias2, at::Tensor output1, at::Tensor output2, at::Tensor gelu_in);
 /****************************************************************************
   *
   *
@@ -684,67 +656,41 @@ int linear_gelu_linear_backward_cuda(
 		at::Tensor weight2, 
 		at::Tensor d_output1, 
 		at::Tensor d_output2, 
-		int in_features, int batch_size, int hidden_features, int out_features, 
 		at::Tensor d_weight1, 
 		at::Tensor d_weight2, 
 		at::Tensor d_bias1, 
 		at::Tensor d_bias2, 
-		at::Tensor d_input,  
-		void *lt_workspace)
+		at::Tensor d_input)
 {
-    // Get the stream from cublas handle to reuse for biasReLU kernel.
-    cudaStream_t stream;
-    cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
-    cublasGetStream(handle, &stream);
+
+    auto batch_size  = input.size(0);
+    auto in_features = input.size(1);
+    int hidden_features = weight1.size(0);
+    int out_features    = weight2.size(0);
 
     const float alpha      = 1.0, beta_zero  = 0.0, beta_one   = 1.0;
     int status  = HIPBLAS_STATUS_NOT_INITIALIZED;
-/*
-    //wgrad for first gemm
-    status = gemm_bgradb_lt(
-		    CUBLAS_OP_N, 
-		    CUBLAS_OP_T, 
-		    &alpha,
-		    &beta_zero, 
-		    output1, 
-                    d_output2, 
-		    d_weight2,
-		    d_bias2, 
-		    true);
+    
+    at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
+    //wgrad for first gemm
+    status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_T,  &alpha, &beta_zero,  output1,  d_output2, d_weight2, d_bias2, dummy_gelu, true, true, false);
+
+    // hidden_features, batch_size, out_features,
     //dgrad for second GEMM
-    status = gemm_dgelu_bgradb_lt(
-		    (cublasLtHandle_t)handle, 
-		    CUBLAS_OP_N, 
-		    CUBLAS_OP_N, 
-		    hidden_features, batch_size, out_features, 
-		    &alpha, 
-		    &beta_zero,
-		    weight2,
-                    d_output2, 
-		    d_output1,
-		    gelu_in,
-		    d_bias1, 
-		    lt_workspace, 
-		    1 << 22, 
-		    stream);
-*/
+    status = gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha,  &beta_zero,  weight2, d_output2, d_output1, d_bias1, gelu_in, true, true, false);
     return status;
 }
 
- template int  linear_gelu_linear_backward_cuda<at::BFloat16>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2, 
-		                                              at::Tensor d_output1, at::Tensor d_output2, int in_features, int batch_size, int hidden_features, 
-							      int out_features, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, 
-							      at::Tensor d_input, void *lt_workspace);
- template int  linear_gelu_linear_backward_cuda<at::Half>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2, 
-		                                              at::Tensor d_output1, at::Tensor d_output2, int in_features, int batch_size, int hidden_features, 
-							      int out_features, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, 
-							      at::Tensor d_input, void *lt_workspace);
- template int  linear_gelu_linear_backward_cuda<float>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2, 
-		                                              at::Tensor d_output1, at::Tensor d_output2, int in_features, int batch_size, int hidden_features, 
-							      int out_features, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, 
-							      at::Tensor d_input, void *lt_workspace);
- template int  linear_gelu_linear_backward_cuda<double>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2, 
-		                                              at::Tensor d_output1, at::Tensor d_output2, int in_features, int batch_size, int hidden_features, 
-							      int out_features, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, 
-							      at::Tensor d_input, void *lt_workspace);
+ template int  linear_gelu_linear_backward_cuda<at::BFloat16>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
+ template int  linear_gelu_linear_backward_cuda<at::Half>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
+ template int  linear_gelu_linear_backward_cuda<c10::Float8_e5m2fnuz>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
+ template int  linear_gelu_linear_backward_cuda<c10::Float8_e4m3fnuz>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
+ template int  linear_gelu_linear_backward_cuda<float>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
+ template int  linear_gelu_linear_backward_cuda<double>(at::Tensor input, at::Tensor gelu_in, at::Tensor output1, at::Tensor weight1, at::Tensor weight2,
+                at::Tensor d_output1, at::Tensor d_output2, at::Tensor d_weight1, at::Tensor d_weight2, at::Tensor d_bias1, at::Tensor d_bias2, at::Tensor d_input);
