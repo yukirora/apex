@@ -5,8 +5,8 @@ batch_size   = 5
 in_features  = 4
 out_features = 3
 
-# tst_dtype = torch.float8_e5m2
-tst_dtype = torch.float16
+tst_dtype = torch.float8_e5m2
+#tst_dtype = torch.float16
 
 I = torch.randn(batch_size, in_features, dtype=tst_dtype, device='cuda')
 
@@ -18,8 +18,8 @@ print("Torch-A:\n", I)
 print("Torch-B:\n", W)
 print("Torch-b:\n", b)
 
-C  = torch.matmul(I, W)+b
-print("Torch-C:\n", C)
+#C  = torch.matmul(I, W)+b
+#print("Torch-C:\n", C)
 
 aC = fused_dense.fused_dense_function(I, W, b)
 print("Torch-aC:\n", aC)

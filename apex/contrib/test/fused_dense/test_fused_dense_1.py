@@ -46,7 +46,7 @@ class FusedDenseTest(common_utils.TestCase):
         #  Farward pass
         # --------------------------------------------------------------------------------------------------
 
-        y_ref = torch.matmul(ref_inputs, dense.weight)+dense.bias
+        y_ref = torch.matmul(ref_inputs, dense.weight.t())+dense.bias
         y_tst = dense(tst_inputs)
         torch.testing.assert_close(y_ref,  y_tst,  atol=1e-3, rtol=1e-3, equal_nan=True)
 
@@ -57,22 +57,22 @@ class FusedDenseTest(common_utils.TestCase):
         # --------------------------------------------------------------------------------------------------
 
         dy  = torch.randn_like(y_tst).to(dtype=dtype)
-        dx_ref = torch.matmul(dy, dense.weight.clone().t())
+        dx_ref = torch.matmul(dy, dense.weight.clone())
         # fused_dense_cuda.linear_bias_backward(input, weight.t(), grad_output)
         y_tst.backward(dy)
 
         print("dx_ref Tensor:\n",   dx_ref)
         print("tst_inputs.grad Tensor:\n", tst_inputs.grad)
-        # torch.testing.assert_close(dx_ref, tst_inputs.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
+        torch.testing.assert_close(dx_ref, tst_inputs.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
 
-        # dw_ref = torch.matmul(ref_inputs.t(), dy.t())
-        # print("dw_ref Tensor:\n",   dw_ref)
-        # print("dense.weight.grad Tensor:\n", dense.weight.grad)
-        # torch.testing.assert_close(dw_ref, dense.weight.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
+        dw_ref = torch.matmul(ref_inputs.t(), dy)
+        print("dw_ref Tensor:\n",   dw_ref)
+        print("dense.weight.grad Tensor:\n", dense.weight.grad)
+        # torch.testing.assert_close(dw_ref, dense.weight.grad., atol=1e-3, rtol=1e-3, equal_nan=True)
 
-        # db_ref = dy.sum(0, False)
-        # print("db_ref Tensor:\n",   db_ref)
-        # print("dense.bias.grad Tensor:\n",   dense.bias.grad)
+        db_ref = dy.sum(0, False)
+        print("db_ref Tensor:\n",   db_ref)
+        print("dense.bias.grad Tensor:\n",   dense.bias.grad)
         # torch.testing.assert_close(db_ref, dense.bias.grad, atol=1e-3, rtol=1e-3, equal_nan=True)
 
         print("********************************************************************")
