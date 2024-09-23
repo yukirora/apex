@@ -188,21 +188,33 @@ int gemm_lt(
     if (d_bias == nullptr) { use_bias=false; }  if (d_gelu == nullptr) { use_gelu=false; }
   
     if (use_bias && use_gelu) {
-         if (use_grad) {  epilogue = HIPBLASLT_EPILOGUE_DGELU_BGRAD;   } 
-         else          {  epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS; }
+         if (use_grad) {  
+		 epilogue = HIPBLASLT_EPILOGUE_DGELU_BGRAD;   
+	 } 
+         else {  
+		 epilogue = HIPBLASLT_EPILOGUE_GELU_AUX_BIAS; 
+	 }
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &d_bias,   sizeof(d_bias)));
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &d_gelu,   sizeof(d_gelu)));
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ld_gelu,  sizeof(ld_gelu)));
     } 
     else if (use_bias) {
-         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_BGRADA; } 
-         else          { epilogue = HIPBLASLT_EPILOGUE_BIAS;   }
+         if (use_grad) { 
+		 epilogue = HIPBLASLT_EPILOGUE_BGRADB; 
+	 } 
+         else { 
+		 epilogue = HIPBLASLT_EPILOGUE_BIAS;   
+	 }
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_POINTER,         &d_bias,     sizeof(d_bias)));
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc,  HIPBLASLT_MATMUL_DESC_BIAS_DATA_TYPE,       &dtype_bias, sizeof(hipDataType)));
     } 
     else if (use_gelu) {
-         if (use_grad) { epilogue = HIPBLASLT_EPILOGUE_DGELU; } 
-	 else          { epilogue = HIPBLASLT_EPILOGUE_GELU_AUX; }
+         if (use_grad) { 
+		 epilogue = HIPBLASLT_EPILOGUE_DGELU; 
+	 } 
+	 else { 
+		 epilogue = HIPBLASLT_EPILOGUE_GELU_AUX; 
+	 }
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_POINTER, &d_gelu,  sizeof(d_gelu)));
          CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute(matmulDesc, HIPBLASLT_MATMUL_DESC_EPILOGUE_AUX_LD,      &ld_gelu, sizeof(ld_gelu)));
     }
@@ -242,7 +254,7 @@ int gemm_lt(
 					  stream));
    
 
-#ifdef DEBUG
+#if DEBUG
     std::cout << "\nTensor-A:\n" << A << "\nTensor-B:\n" << B << "\nTensor-C:\n" << C << "\nTensor-Bias:\n" << bias << std::endl;
     std::cout << "\nSizes: A[" << A.size(0) << "," <<  A.size(1) << "]" << std::endl;
     std::cout << "\nSizes: B[" << B.size(0) << "," <<  B.size(1) << "]" << std::endl;
@@ -275,7 +287,6 @@ at::Tensor linear_bias_forward( at::Tensor input, at::Tensor weight, at::Tensor 
    if(input.size(1)==weight.size(1)) { weight = weight.transpose(1, 0).contiguous(); } 
 
     if (input.size(1)!=weight.size(0)) { 
-	   // at::Tensor output = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 	   std::cout << "Matrix AxB for the size below is not possible" << std::endl; 
            std::cout << "\nSizes: A[" << input.size(0) << "," << input.size(1) << "]" << std::endl;
            std::cout << "\nSizes: B[" << weight.size(0) << "," <<  weight.size(1) << "]" << std::endl;
@@ -285,7 +296,6 @@ at::Tensor linear_bias_forward( at::Tensor input, at::Tensor weight, at::Tensor 
     auto output = at::zeros({input.size(0), weight.size(1)}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
     if (bias.size(0) != weight.size(1)){
-           // at::Tensor output = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
            std::cout << "Bias size required to " <<  weight.size(1) << " but received " << bias.size(0) << std::endl;
            return {at::empty({0})};
     }
@@ -315,9 +325,10 @@ std::vector<at::Tensor>  linear_bias_backward(at::Tensor input, at::Tensor weigh
     // **********************************************************************************
     // dX  = dY ⋅ WT: (Weight is transposed in Python layer before sending here) 
     // **********************************************************************************
+    if(d_output.size(1)== weight.size(1)) { weight = weight.transpose(1, 0).contiguous(); }
+
     if (d_output.size(1)!=weight.size(0)) {
-           // at::Tensor output = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "linear_bias_backward: d_input: Matrix AxB for the size below is not possible" << std::endl;
            std::cout << "\nSizes: A[" << d_output.size(0) << "," << d_output.size(1) << "]" << std::endl;
            std::cout << "\nSizes: B[" << weight.size(0) << "," << weight.size(1) << "]" << std::endl;
            return {at::empty({0})};
@@ -333,14 +344,15 @@ std::vector<at::Tensor>  linear_bias_backward(at::Tensor input, at::Tensor weigh
     if(input.size(1)==d_output.size(1)) { d_output = d_output.transpose(1, 0).contiguous(); }
 
     if (input.size(1)!=d_output.size(0)) {
-           // at::Tensor output = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "linear_bias_backward: d_weight: Matrix AxB for the size below is not possible" << std::endl;
            std::cout << "\nSizes: A[" << input.size(0) << "," << input.size(1) << "]" << std::endl;
            std::cout << "\nSizes: B[" << d_output.size(0) << "," <<  d_output.size(1) << "]" << std::endl;
            return {at::empty({0})};
     }
 
-    CHECK_HIPBLASLT_ERROR(gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, d_output, input, d_weight, d_bias, dummy_gelu, true, true, false));
+    CHECK_HIPBLASLT_ERROR(gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, d_output, input, d_weight, d_bias, dummy_gelu, false, false, false));
+
+    d_bias = d_output.sum(0,false);
 
     return {d_input, d_weight, d_bias};
 }
@@ -353,7 +365,7 @@ std::vector<at::Tensor>  linear_gelu_linear_forward(at::Tensor input,	at::Tensor
 		                                    at::Tensor bias1, 	at::Tensor weight2,  
 						    at::Tensor bias2)
 {
-    const float alpha      = 1.0, beta_zero  = 0.0;
+    const float alpha      = 1.0, beta  = 0.0;
     int status  = HIPBLAS_STATUS_NOT_INITIALIZED;
     auto batch_size      = input.size(0),   in_features      = input.size(1);
     int  hidden_features = weight1.size(0),  out_features    = weight2.size(0);
@@ -362,11 +374,36 @@ std::vector<at::Tensor>  linear_gelu_linear_forward(at::Tensor input,	at::Tensor
     auto output1      = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
     auto gelu_in      = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
     auto output2      = at::zeros({batch_size, out_features},    torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
     at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-    status = gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta_zero, weight1, input,   output1, bias1,   gelu_in,    true, false, true);
-    status = gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta_zero, weight2, output1, bias2,   output2, dummy_gelu, true, false, false);
+    // **********************************************************************************
+    // 
+    // **********************************************************************************
+   if(input.size(1)==weight1.size(1)) { weight1 = weight1.transpose(1, 0).contiguous(); }
+
+    if (input.size(1)!=weight1.size(0)) {
+           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "\nSizes: A[" << input.size(0) << "," << input.size(1) << "]" << std::endl;
+           std::cout << "\nSizes: B[" << weight1.size(0) << "," <<  weight1.size(1) << "]" << std::endl;
+           return {at::empty({0})};
+    }
+
+    CHECK_HIPBLASLT_ERROR(gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, weight1, input, output1, bias1, gelu_in, true, false, true));
+
+
+    // **********************************************************************************
+    // 
+    // **********************************************************************************
+   if(output1.size(1)==weight2.size(1)) { weight2 = weight2.transpose(1, 0).contiguous(); }
+
+    if (output1.size(1)!=weight2.size(0)) {
+           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "\nSizes: A[" << output1.size(0) << "," << output1.size(1) << "]" << std::endl;
+           std::cout << "\nSizes: B[" << weight2.size(0) << "," <<  weight2.size(1) << "]" << std::endl;
+           return {at::empty({0})};
+    }
+
+    CHECK_HIPBLASLT_ERROR(gemm_lt(CUBLAS_OP_T, CUBLAS_OP_N, &alpha, &beta, weight2, output1, bias2, output2, dummy_gelu, true, false, false));
 
     return {output1, output2, gelu_in};
 }
@@ -393,13 +430,34 @@ std::vector<at::Tensor>  linear_gelu_linear_backward(at::Tensor input,     at::T
     auto d_output1    = at::empty({batch_size,       hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
      
     at::Tensor dummy_gelu      = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+    // **********************************************************************************
+    //
+    // **********************************************************************************
+   if(d_output2.size(1)==output1.size(1)) {  output1 = output1.transpose(1, 0).contiguous(); }
+
+    if (d_output2.size(1)!=output1.size(0)) {
+           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "\nSizes: A[" << d_output2.size(0) << "," << d_output2.size(1) << "]" << std::endl;
+           std::cout << "\nSizes: B[" << output1.size(0) << "," <<  output1.size(1) << "]" << std::endl;
+           return {at::empty({0})};
+    }
 
     //wgrad for first gemm
-    status = gemm_lt(CUBLAS_OP_N, CUBLAS_OP_T,  &alpha, &beta_zero,  output1,  d_output2, d_weight2, d_bias2, dummy_gelu, true, true, false);
+    CHECK_HIPBLASLT_ERROR(gemm_lt(CUBLAS_OP_N, CUBLAS_OP_T,  &alpha, &beta_zero,  output1,  d_output2, d_weight2, d_bias2, dummy_gelu, true, true, false));
 
-    // hidden_features, batch_size, out_features,
-    //dgrad for second GEMM
-    status = gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha,  &beta_zero,  weight2, d_output2, d_output1, d_bias1, gelu_in, true, true, false);
+    // **********************************************************************************
+    // hidden_features, batch_size, out_features, dgrad for second GEMM
+    // **********************************************************************************
+   if(output1.size(1)==weight2.size(1)) { weight2 = weight2.transpose(1, 0).contiguous(); }
+
+    if (output1.size(1)!=weight2.size(0)) {
+           std::cout << "Matrix AxB for the size below is not possible" << std::endl;
+           std::cout << "\nSizes: A[" << output1.size(0) << "," << output1.size(1) << "]" << std::endl;
+           std::cout << "\nSizes: B[" << weight2.size(0) << "," <<  weight2.size(1) << "]" << std::endl;
+           return {at::empty({0})};
+    }
+    
+    CHECK_HIPBLASLT_ERROR(gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha,  &beta_zero,  weight2, d_output2, d_output1, d_bias1, gelu_in, true, true, false));
 
     return {d_input, d_weight1, d_bias1, d_weight2, d_bias2};
 }
