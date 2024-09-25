@@ -19,6 +19,20 @@
 
 #include "type_shim.h"
 
+#ifndef CHECK_HIP_ERROR
+#define CHECK_HIP_ERROR(error)                    \
+    if(error != hipSuccess)                       \
+    {                                             \
+        fprintf(stderr,                           \
+                "Hip error: '%s'(%d) at %s:%d\n", \
+                hipGetErrorString(error),         \
+                error,                            \
+                __FILE__,                         \
+                __LINE__);                        \
+        exit(EXIT_FAILURE);                       \
+    }
+#endif
+
 #ifndef CHECK_HIPBLASLT_ERROR
 #define CHECK_HIPBLASLT_ERROR(error)                                                      \
     if(error != HIPBLAS_STATUS_SUCCESS)                                                   \
@@ -145,16 +159,30 @@ int gemm_lt(
 
     int64_t ld_gelu = (int64_t) C.size(0);
 
-    const int m = trans_a == HIPBLAS_OP_T ? A.size(0) : A.size(1);
-    const int k = trans_a == HIPBLAS_OP_T ? A.size(1) : A.size(0);
-    const int n = trans_b == HIPBLAS_OP_T ? B.size(1) : B.size(0);
-
-    int lda, ldb, ldd;
-    if (trans_a == HIPBLAS_OP_T && trans_b == HIPBLAS_OP_N)       {  lda = A.size(1);  ldb = B.size(1);  ldd = m; // TN
-    } else if (trans_a ==HIPBLAS_OP_N && trans_b == HIPBLAS_OP_N) {  lda = m;  ldb = k;  ldd = m; // NN
-    } else if (trans_a ==HIPBLAS_OP_N && trans_b == HIPBLAS_OP_T) {  lda = m;  ldb = n;  ldd = m; // NT
-    } else {  std::cout << "layout not allowed." << std::endl; return 0; // TT
+    if ((trans_a==HIPBLAS_OP_T) && (trans_b==HIPBLAS_OP_T)) {
+	    std::cout << "Both Transose is not supported";
+	    return HIPBLAS_STATUS_NOT_SUPPORTED;
     }
+
+    /* ============================================================================================
+     *   Matrix layout
+     */
+    int64_t m = trans_a==HIPBLAS_OP_T?A.size(0):A.size(1);
+    int64_t k = trans_a==HIPBLAS_OP_T?A.size(1):A.size(0);
+    int64_t n = trans_b==HIPBLAS_OP_T?B.size(1):B.size(0);
+
+
+    int64_t lda=0, ldb=0, ldd=0;
+
+    if      ((trans_a==HIPBLAS_OP_T) && (trans_b!=HIPBLAS_OP_T)) { lda = k; ldb = k; } // TN 
+    else if ((trans_a!=HIPBLAS_OP_T) && (trans_b==HIPBLAS_OP_T)) { lda = m; ldb = n; } // NT
+    else if ((trans_a!=HIPBLAS_OP_T) && (trans_b!=HIPBLAS_OP_T)) { lda = m; ldb = k; } // NN
+
+
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dtype_a, trans_a==HIPBLAS_OP_T?k:m, trans_a==HIPBLAS_OP_T?m:k, lda));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dtype_b, trans_b==HIPBLAS_OP_T?n:k, trans_b==HIPBLAS_OP_T?k:n, ldb));
+    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dtype_c, m,  n, m));
+
 
     /* ============================================================================================
     * default to 32F except for e5m2 inputs where the config is not supported
@@ -172,15 +200,6 @@ int gemm_lt(
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescCreate(&matmulDesc, desc_computeType, desc_dataType));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmulDesc, HIPBLASLT_MATMUL_DESC_TRANSA, &trans_a, sizeof(trans_a)));
     CHECK_HIPBLASLT_ERROR(hipblasLtMatmulDescSetAttribute( matmulDesc, HIPBLASLT_MATMUL_DESC_TRANSB, &trans_b, sizeof(trans_b)));
-
-
-    /* ============================================================================================
-     *   Matrix layout
-     */
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matA, dtype_a, m , k, lda));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matB, dtype_b, k,  n, ldb));
-    CHECK_HIPBLASLT_ERROR(hipblasLtMatrixLayoutCreate(&matC, dtype_c, m,  n, ldd));
-
 
     /* ============================================================================================
      *   Configure epilogue
@@ -279,29 +298,25 @@ int gemm_lt(
   **************************************************************************/
 at::Tensor linear_bias_forward( at::Tensor input, at::Tensor weight, at::Tensor bias) 
 {
-    int         status = HIPBLAS_STATUS_NOT_INITIALIZED;
-    const float alpha  = 1.0, beta = 0.0;
+    const float          alpha  = 1.0, beta = 0.0;
+    hipblasOperation_t   trans_a = HIPBLAS_OP_N;
+
+    auto A = weight;
+    auto B = input;
+
+    int m, n;
+
+    if(A.size(1)==B.size(1)) { m = A.size(0);  trans_a = HIPBLAS_OP_T;  }
+    else                     { m = A.size(1);  trans_a = HIPBLAS_OP_N;  }
+    
+    n = B.size(0);
 
     at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
     
-   if(input.size(1)==weight.size(1)) { weight = weight.transpose(1, 0).contiguous(); } 
+    auto C = at::zeros({n,m}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-    if (input.size(1)!=weight.size(0)) { 
-	   std::cout << "Matrix AxB for the size below is not possible" << std::endl; 
-           std::cout << "\nSizes: A[" << input.size(0) << "," << input.size(1) << "]" << std::endl;
-           std::cout << "\nSizes: B[" << weight.size(0) << "," <<  weight.size(1) << "]" << std::endl;
-           return {at::empty({0})};
-    }
-
-    auto output = at::zeros({input.size(0), weight.size(1)}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
-    if (bias.size(0) != weight.size(1)){
-           std::cout << "Bias size required to " <<  weight.size(1) << " but received " << bias.size(0) << std::endl;
-           return {at::empty({0})};
-    }
-    
-    CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_N, HIPBLAS_OP_N, &alpha, &beta, weight, input, output, bias, dummy_gelu, true, false, false));
-    return {output};
+    CHECK_HIPBLASLT_ERROR(gemm_lt(trans_a, HIPBLAS_OP_N, &alpha, &beta, A, B, C, bias, dummy_gelu, true, false, false));
+    return {C};
 
 }
 
@@ -315,44 +330,47 @@ at::Tensor linear_bias_forward( at::Tensor input, at::Tensor weight, at::Tensor 
  **************************************************************************/
 std::vector<at::Tensor>  linear_bias_backward(at::Tensor input, at::Tensor weight, at::Tensor  d_output)
 {
-    int status = HIPBLAS_STATUS_NOT_INITIALIZED;
     const float alpha = 1.0, beta = 0.0;
+    hipblasOperation_t   trans_a = HIPBLAS_OP_N;
+    hipblasOperation_t   trans_b = HIPBLAS_OP_N;
 
+    int m, n;
+    auto d_bias   = at::zeros(weight.size(0),  torch::device(torch::kCUDA).dtype(input.scalar_type()));
     auto dummy_gelu  = at::empty({0},             torch::device(torch::kCUDA).dtype(input.scalar_type()));
-    auto d_bias      = at::zeros(weight.size(0),  torch::device(torch::kCUDA).dtype(input.scalar_type()));
-    auto d_weight    = at::zeros_like(weight,     torch::device(torch::kCUDA).dtype(input.scalar_type()));
-    auto d_input     = at::zeros_like(input,      torch::device(torch::kCUDA).dtype(input.scalar_type()));
+
     // **********************************************************************************
     // dX  = dY ⋅ WT: (Weight is transposed in Python layer before sending here) 
     // **********************************************************************************
-    if(d_output.size(1)== weight.size(1)) { weight = weight.transpose(1, 0).contiguous(); }
 
-    if (d_output.size(1)!=weight.size(0)) {
-           std::cout << "linear_bias_backward: d_input: Matrix AxB for the size below is not possible" << std::endl;
-           std::cout << "\nSizes: A[" << d_output.size(0) << "," << d_output.size(1) << "]" << std::endl;
-           std::cout << "\nSizes: B[" << weight.size(0) << "," << weight.size(1) << "]" << std::endl;
-           return {at::empty({0})};
-    }
+    auto A = weight;
+    auto B = d_output;
 
+    if(A.size(1)==B.size(1)) { m = A.size(0);  trans_a = HIPBLAS_OP_T;  }
+    else                     { m = A.size(1);  trans_a = HIPBLAS_OP_N;  }
+    n = B.size(0);
 
-    CHECK_HIPBLASLT_ERROR(gemm_lt(CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, weight, d_output, d_input, d_bias, dummy_gelu, false, false, false));
+    auto d_input = at::zeros({n,m}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+
+    CHECK_HIPBLASLT_ERROR(gemm_lt(trans_a, HIPBLAS_OP_N, &alpha, &beta, A, B, d_input, d_bias, dummy_gelu, false, false, false));
 
     // **********************************************************************************
     // dW  = XT ⋅ dY and db=sum(dY)
     // **********************************************************************************
+
+    A = d_output;
+    B = input;
+
     input = input.transpose(1, 0).contiguous();
-    if(input.size(1)==d_output.size(1)) { d_output = d_output.transpose(1, 0).contiguous(); }
 
-    if (input.size(1)!=d_output.size(0)) {
-           std::cout << "linear_bias_backward: d_weight: Matrix AxB for the size below is not possible" << std::endl;
-           std::cout << "\nSizes: A[" << input.size(0) << "," << input.size(1) << "]" << std::endl;
-           std::cout << "\nSizes: B[" << d_output.size(0) << "," <<  d_output.size(1) << "]" << std::endl;
-           return {at::empty({0})};
-    }
+    if     (A.size(1)==B.size(1)) { m = A.size(0); n = B.size(0); trans_a = HIPBLAS_OP_T; trans_b = HIPBLAS_OP_N; }
+    else if(A.size(0)==B.size(0)) { m = B.size(1); n = A.size(1); trans_a = HIPBLAS_OP_N; trans_b = HIPBLAS_OP_T; }
+    else                          { m = A.size(1); n = B.size(0); trans_a = HIPBLAS_OP_N; trans_b = HIPBLAS_OP_N; }
 
-    CHECK_HIPBLASLT_ERROR(gemm_lt( CUBLAS_OP_N, CUBLAS_OP_N, &alpha, &beta, d_output, input, d_weight, d_bias, dummy_gelu, false, false, false));
+    auto d_weight = at::zeros({n,m}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
-    d_bias = d_output.sum(0,false);
+    CHECK_HIPBLASLT_ERROR(gemm_lt(trans_a, HIPBLAS_OP_N, &alpha, &beta, A, B, d_weight, d_bias, dummy_gelu, true, true, false));
+
+    // d_bias = d_output.sum(0,false);
 
     return {d_input, d_weight, d_bias};
 }
