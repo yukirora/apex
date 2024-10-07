@@ -86,21 +86,6 @@
     AT_ERROR(#NAME, " not implemented type ");      \
   }
 
-template <hipblasComputeType_t ComputeType, typename TensorType, hipDataType DataType>
-hipblasStatus_t gemm_bias(
-    hipblasHandle_t handle, hipblasOperation_t transa, hipblasOperation_t transb,
-    int m, int n, int k,
-    const float *alpha,
-    const TensorType *A, int lda,
-    const TensorType *B, int ldb,
-    const float *beta,
-    TensorType *C, int ldc)
-{
-  return hipblasGemmEx(handle, transa, transb, m, n, k,
-                      alpha, A, DataType, lda, B, DataType,
-                      ldb, beta, C, DataType, ldc, ComputeType,
-                      CUBLAS_GEMM_DEFAULT);
-}
 
 hipDataType get_dtype(at::Tensor A)
 {
@@ -134,6 +119,8 @@ hipDataType get_dtype(at::Tensor A)
 
   return dataType;
 }
+
+#ifdef HIPBLASLT
 
 /********************************************************************************************************************************************************
  *
@@ -309,7 +296,7 @@ int gemm_lt(
   /* ============================================================================================
    *   Algo Get Heuristic
    * 1. retrieves the possible algorithms for given input matrices A, B and C, and the output matrix D.
-   *    decription/layout. In out case matrux C and D are same. search result is in heuristicResultsArray[].
+   *    decription/layout. In our case matrux C and D are same. search result is in heuristicResultsArray[].
    */
   hipblasLtMatmulPreference_t pref;
 
@@ -353,11 +340,10 @@ int gemm_lt(
                                         workspace, workspace_size, stream));
 
 #if DEBUG
-  std::cout << "\nTensor-A:\n"
-            << A << "\nTensor-B:\n"
-            << B << "\nTensor-C:\n"
-            << C << "\nTensor-Bias:\n"
-            << bias << std::endl;
+  std::cout << "\nTensor-A:\n" << A 
+            << "\nTensor-B:\n" << B 
+            << "\nTensor-C:\n" << C 
+            << "\nTensor-Bias:\n" << bias << std::endl;
   std::cout << "\nSizes: A[" << A.size(0) << "," << A.size(1) << "]" << std::endl;
   std::cout << "\nSizes: B[" << B.size(0) << "," << B.size(1) << "]" << std::endl;
   std::cout << "\nSizes: C[" << C.size(0) << "," << C.size(1) << "]" << std::endl;
@@ -373,6 +359,24 @@ int gemm_lt(
 
   return HIPBLAS_STATUS_SUCCESS;
 }
+
+#else
+
+template <hipblasComputeType_t ComputeType, typename TensorType, hipDataType DataType>
+hipblasStatus_t gemm_bias( hipblasOperation_t transa, hipblasOperation_t transb,
+                           int64_t m, int64_t n, int64_t k, const float *alpha, const float *beta,
+                           const TensorType *A, const TensorType *B, TensorType *C)
+{
+  hipblasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+  int64_t lda = n;
+  int64_t ldb = k;
+  int64_t ldc = m;
+
+  return hipblasGemmEx(handle, transa, transb, m,  n,   k,  alpha,  A,  DataType,   lda,  B,  DataType,  
+                       ldb,  beta,  C,  DataType,  ldc,  ComputeType,  CUBLAS_GEMM_DEFAULT);
+}
+
+#endif // HIPBLASLT 
 
 /****************************************************************************
  * output[batch_size, out_features] = input[batch_size, in_features] * weight[out_features,in_features] + bias[out_features]
@@ -391,8 +395,18 @@ at::Tensor linear_bias_forward(at::Tensor input, at::Tensor weight, at::Tensor b
   // output[batch_size, out_features] = input[batch_size, in_features] * weight[out_features,in_features] + bias[out_features]
   // **********************************************************************************
   auto output = at::zeros({batch_size, out_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  
+#ifdef HIPBLASLT  
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_T, HIPBLAS_OP_N, &alpha, &beta, weight, input, output, bias, dummy_gelu, true, false, false));
+
+#else 
+  DISPATCH_TYPES(input.scalar_type(), "linear_bias_forward", [&] {
+    auto result = gemm_bias<compute_t, compute_datatype_t, scalar_t, datatype_t>(
+                            HIPBLAS_OP_T, HIPBLAS_OP_N, out_features, batch_size, in_features, 
+                            &alpha, &beta, weight.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), output.data_ptr<scalar_t>());
+    if (result != 0) { fprintf(stderr, "INVALID RESULT for linear_bias_forward\n"); }
+  });
+#endif // HIPBLASLT 
+
   return {output};
 }
 
@@ -407,34 +421,49 @@ std::vector<at::Tensor> linear_bias_backward(at::Tensor input, at::Tensor weight
 {
   const float alpha = 1.0, beta = 0.0;
 
-  int64_t  batch_size      = input.size(0); // input[batch_size, in_features]
-  int64_t  in_features     = input.size(1);
-  int64_t  out_features    = weight.size(0); // weight[out_features,in_features]
+  int64_t  batch_size   = input.size(0); // input[batch_size, in_features]
+  int64_t  in_features  = input.size(1);
+  int64_t  out_features = weight.size(0); // weight[out_features,in_features]
 
-  auto grad_bias = at::zeros(out_features, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto grad_bias  = at::zeros(out_features, torch::device(torch::kCUDA).dtype(input.scalar_type()));
   auto dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto grad_weight = at::zeros({out_features,in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  auto grad_input = at::zeros({batch_size, in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
+#ifdef HIPBLASLT  
   // **********************************************************************************
   // Gradient of Input  :
   // grad_input [batch_size, in_features] = output[batch_size, out_features] * Weight[out_features,in_features]
   // **********************************************************************************
-  auto grad_input = at::zeros({batch_size, in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_N, HIPBLAS_OP_N, &alpha, &beta, weight, output, grad_input, grad_bias, dummy_gelu, false, false, false));
 
   // **********************************************************************************
   // Gradient of Weights:
   // grad_weight[out_features,in_features] = input[batch_size, in_features](T)  * output[batch_size, out_features] 
   // **********************************************************************************
-  auto grad_weight = at::zeros({out_features,in_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_N, HIPBLAS_OP_T, &alpha, &beta, output, input, grad_weight, grad_bias, dummy_gelu, true, false, false));
+
   // **********************************************************************************
   // ToDo: Check why HipBLASLt fail to get bgrad above so this step is not needed.
   // db=sum(dY)
   // **********************************************************************************
   grad_bias = output.sum(0, false);
+#else
 
+  DISPATCH_TYPES(input.scalar_type(), "linear_bias_forward", [&] {
+    auto result = gemm_bias<compute_t, compute_datatype_t, scalar_t, datatype_t>(
+                            HIPBLAS_OP_N, HIPBLAS_OP_T, in_features, out_features, batch_size, 
+                            &alpha, &beta, input.data_ptr<scalar_t>(), output.data_ptr<scalar_t>(), grad_weight.data_ptr<scalar_t>());
+    if (result != 0) { fprintf(stderr, "INVALID RESULT for linear_bias_forward\n"); }
+  });
+
+    DISPATCH_TYPES(input.scalar_type(), "linear_bias_forward", [&] {
+    auto result = gemm_bias<compute_t, compute_datatype_t, scalar_t, datatype_t>(
+                            HIPBLAS_OP_N, HIPBLAS_OP_N, in_features, batch_size,, out_features,
+                            &alpha, &beta, weight.data_ptr<scalar_t>(), output.data_ptr<scalar_t>(), grad_input.data_ptr<scalar_t>());
+    if (result != 0) { fprintf(stderr, "INVALID RESULT for linear_bias_forward\n"); }
+  });
+#endif // HIPBLASLT
   return {grad_input, grad_weight, grad_bias};
 }
 
@@ -471,23 +500,26 @@ std::vector<at::Tensor> linear_gelu_linear_forward(at::Tensor input,   at::Tenso
   int64_t  hidden_features = weight.size(0);   // weight[hidden_features, in_features]
   int64_t  out_features    = weight2.size(0);  // weight2[out_features, hidden_features]
 
-  
+
+  at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+
   // **********************************************************************************
   // output[batch_size, hidden_features] = input[batch_size, in_features] * weight[hidden_features,in_features] + bias[hidden_features]
   // **********************************************************************************
-  at::Tensor output = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-  at::Tensor gelu   = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
-  CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_T, HIPBLAS_OP_N, &alpha, &beta, weight, input, output, bias, gelu, true, false, true));
+  at::Tensor output  = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  at::Tensor gelu    = at::zeros({batch_size, hidden_features}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
   // **********************************************************************************
   // output2[batch_size,out_features] = output[batch_size, hidden_features] * weight2[out_features, hidden_features] + bias2[out_features]
   // **********************************************************************************
-  auto output2 = at::zeros({batch_size,out_features}, torch::device(torch::kCUDA).dtype(input.scalar_type())); // output2[batch_size,out_features]
-  at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
+  at::Tensor output2 = at::zeros({batch_size,out_features}, torch::device(torch::kCUDA).dtype(input.scalar_type())); // output2[batch_size,out_features]
 
+#ifdef HIPBLASLT 
+  CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_T, HIPBLAS_OP_N, &alpha, &beta, weight, input, output, bias, gelu, true, false, true));
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_T, HIPBLAS_OP_N, &alpha, &beta, weight2, output, output2, bias2, dummy_gelu, true, false, false));
-
+#else 
+ std::cout << "linear_gelu_linear_forward not implimented for non-MI300 GPU" << std::endl;
+#endif
   return {output, output2, gelu};
 }
 
@@ -524,7 +556,7 @@ std::vector<at::Tensor> linear_gelu_linear_backward(at::Tensor input, at::Tensor
   at::Tensor grad_output  = at::zeros({batch_size, hidden_features},   torch::device(torch::kCUDA).dtype(input.scalar_type()));
 
   at::Tensor dummy_gelu = at::empty({0}, torch::device(torch::kCUDA).dtype(input.scalar_type()));
-
+#ifdef HIPBLASLT 
   // **********************************************************************************
   // Gradient For second gemm  :
   // grad_output[batch_size, hidden_features]  = output2[batch_size,out_features] ⋅ weight2[out_features, hidden_features]
@@ -542,6 +574,8 @@ std::vector<at::Tensor> linear_gelu_linear_backward(at::Tensor input, at::Tensor
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_N, HIPBLAS_OP_N, &alpha, &beta, weight, output, grad_input, grad_bias2, dummy_gelu, false, false, false));
   CHECK_HIPBLASLT_ERROR(gemm_lt(HIPBLAS_OP_N, HIPBLAS_OP_T, &alpha, &beta, output, input, grad_weight, grad_bias2, dummy_gelu, true, false, false));
   grad_bias = output.sum(0, false);   // ToDo: Check why HipBLASLt fail to get bgrad above so this step is not needed.
-
+#else
+  std::cout << "linear_gelu_linear_backward not implimented for non-MI300 GPU" << std::endl;
+#endif
   return {grad_input, grad_weight, grad_bias, grad_weight2, grad_bias2};
 }

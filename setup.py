@@ -11,6 +11,15 @@ import os
 this_dir = os.path.dirname(os.path.abspath(__file__))
 torch_dir = torch.__path__[0]
 
+
+def hipBLASlt_supported():
+    supported_arch = ['gfx942']
+    device_props = torch.cuda.get_device_properties(0); 
+    if device_props.gcnArchName.split(":",1)[0] in supported_arch: 
+        return True
+    else:
+        return False
+
 # https://github.com/pytorch/pytorch/pull/71881
 # For the extensions which have rocblas_gemm_flags_fp16_alt_impl we need to make sure if at::BackwardPassGuard exists.
 # It helps the extensions be backward compatible with old PyTorch versions.
@@ -155,6 +164,7 @@ def check_if_rocm_pytorch():
     return is_rocm_pytorch
 
 IS_ROCM_PYTORCH = check_if_rocm_pytorch()
+IS_HIPBLASLT_SUPPORTED = hipBLASlt_supported()
 
 if not torch.cuda.is_available() and not IS_ROCM_PYTORCH:
     # https://github.com/NVIDIA/apex/issues/486
@@ -220,7 +230,8 @@ version_dependent_macros = version_ge_1_1 + version_ge_1_3 + version_ge_1_5
 if IS_ROCM_PYTORCH and (ROCM_MAJOR >= 6):
     version_dependent_macros += ["-DHIPBLAS_V2"] 
 
-
+if IS_HIPBLASLT_SUPPORTED:
+    version_dependent_macros += ["-DHIPBLASLT"]
 
 if "--distributed_adam" in sys.argv or "--cuda_ext" in sys.argv:
     if "--distributed_adam" in sys.argv:
@@ -338,7 +349,7 @@ if "--cuda_ext" in sys.argv:
                                  '-U__CUDA_NO_HALF_CONVERSIONS__',
                                  '--expt-relaxed-constexpr',
                                  '--expt-extended-lambda'] + version_dependent_macros
-        hipcc_args_transformer = ['-O3',
+        hipcc_args_transformer = ['-g',
                                  '-U__CUDA_NO_HALF_OPERATORS__',
                                  '-U__CUDA_NO_HALF_CONVERSIONS__'] + version_dependent_macros
         ext_modules.append(
