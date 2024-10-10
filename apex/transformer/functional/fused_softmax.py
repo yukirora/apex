@@ -227,14 +227,22 @@ class FusedScaleMaskSoftmax(torch.nn.Module):
             and self.input_in_float16  # input must be fp16
             and (
                 self.attn_mask_type == AttnMaskType.causal
-                or (self.attn_mask_type == AttnMaskType.padding and mask is not None)
+                or self.attn_mask_type == AttnMaskType.padding
             )
+<<<<<<< HEAD
             and 16 < sk <= 16384  # sk must be 16 ~ 16384
+=======
+            and 16 < sk <= 4096  # sk must be 16 ~ 4096
+>>>>>>> dev/hubertlu/run_transformer
             and sq % 4 == 0  # sq must be divisor of 4
             and sk % 4 == 0  # sk must be divisor of 4
             and attn_batches % 4 == 0  # np * b must be divisor of 4
         ):
+<<<<<<< HEAD
             if 0 <= sk <= 16384:
+=======
+            if 0 <= sk <= 4096:
+>>>>>>> dev/hubertlu/run_transformer
                 batch_per_block = self.get_batch_per_block(sq, sk, b, np)
 
                 if self.attn_mask_type == AttnMaskType.causal:
@@ -272,3 +280,30 @@ class FusedScaleMaskSoftmax(torch.nn.Module):
         import scaled_masked_softmax_cuda
 
         return scaled_masked_softmax_cuda.get_batch_per_block(sq, sk, b, np)
+
+class GenericFusedScaleMaskSoftmax(FusedScaleMaskSoftmax):
+    """
+    Generic version of FusedSacleMaskSoftmax.
+    It removes the seq-len limitations and has slight performance degragation compared with FusedScaleMaskSoftmax
+
+    fused operation: scaling + mask + softmax
+
+    Arguments:
+        input_in_fp16: flag to indicate if input in fp16 data format.
+        input_in_bf16: flag to indicate if input in bf16 data format.
+        scaled_masked_softmax_fusion: flag to indicate user want to use softmax fusion
+        mask_func: mask function to be applied.
+        softmax_in_fp32: if true, softmax in performed at fp32 precision.
+        scale: scaling factor used in input tensor scaling.
+    """
+
+    def __init__(
+        self, input_in_fp16, input_in_bf16, scaled_masked_softmax_fusion, mask_func, softmax_in_fp32, scale,
+    ):
+        super().__init__(input_in_fp16, input_in_bf16, AttnMaskType.padding, scaled_masked_softmax_fusion, mask_func, softmax_in_fp32, scale)
+        self.scaled_masked_softmax_fusion = generic_scaled_masked_softmax
+
+    def is_kernel_available(self, mask, b, np, sq, sk):
+        if self.scaled_masked_softmax_fusion and 0 < sk:  # user want to fuse  # sk must be 1 ~
+            return True
+        return False

@@ -15,6 +15,44 @@
 
 
 // BF16 Tensor core wrapper around cublas GEMMEx
+#if defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
+void gemmex_wrapper(
+    hipblasHandle_t handle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float* alpha,
+    at::BFloat16* A,
+    int lda,
+    at::BFloat16* B,
+    int ldb,
+    const float* beta,
+    float* C,
+    int ldc) {
+  TORCH_CUDABLAS_CHECK(hipblasGemmEx_v2(
+      handle,
+      transa,
+      transb,
+      m,
+      n,
+      k,
+      alpha,
+      A,
+      HIP_R_16BF,
+      lda,
+      B,
+      HIP_R_16BF,
+      ldb,
+      beta,
+      C,
+      HIP_R_32F,
+      ldc,
+      HIPBLAS_COMPUTE_32F,
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    }
+#else
 void gemmex_wrapper(
     cublasHandle_t handle,
     cublasOperation_t transa,
@@ -50,9 +88,48 @@ void gemmex_wrapper(
       ldc,
       CUDA_R_32F,
       CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-}
+    }
+#endif
+
 
 // FP16 Tensor core wrapper around cublas GEMMEx
+#if defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
+void gemmex_wrapper(
+    hipblasHandle_t handle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float* alpha,
+    at::Half* A,
+    int lda,
+    at::Half* B,
+    int ldb,
+    const float* beta,
+    float* C,
+    int ldc) {
+  TORCH_CUDABLAS_CHECK(hipblasGemmEx_v2(
+      handle,
+      transa,
+      transb,
+      m,
+      n,
+      k,
+      alpha,
+      A,
+      HIP_R_16F,
+      lda,
+      B,
+      HIP_R_16F,
+      ldb,
+      beta,
+      C,
+      HIP_R_32F,
+      ldc,
+      HIPBLAS_COMPUTE_32F,
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));}
+#else
 void gemmex_wrapper(
     cublasHandle_t handle,
     cublasOperation_t transa,
@@ -87,10 +164,48 @@ void gemmex_wrapper(
       CUDA_R_32F,
       ldc,
       CUDA_R_32F,
-      CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-}
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));}
+#endif
+
 
 // FP32 wrapper around cublas GEMMEx
+#if defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
+void gemmex_wrapper(
+    hipblasHandle_t handle,
+    hipblasOperation_t transa,
+    hipblasOperation_t transb,
+    int m,
+    int n,
+    int k,
+    const float *alpha,
+    float *A,
+    int lda,
+    float *B,
+    int ldb,
+    const float *beta,
+    float *C,
+    int ldc) {
+  TORCH_CUDABLAS_CHECK(hipblasGemmEx_v2(
+      handle,
+      transa,
+      transb,
+      m,
+      n,
+      k,
+      alpha,
+      A,
+      HIP_R_32F,
+      lda,
+      B,
+      HIP_R_32F,
+      ldb,
+      beta,
+      C,
+      HIP_R_32F,
+      ldc,
+      HIPBLAS_COMPUTE_32F,
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));}
+#else
 void gemmex_wrapper(
     cublasHandle_t handle,
     cublasOperation_t transa,
@@ -125,14 +240,22 @@ void gemmex_wrapper(
       CUDA_R_32F,
       ldc,
       CUDA_R_32F,
-      CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-}
+      CUBLAS_GEMM_DEFAULT_TENSOR_OP));}
+#endif
+
 
 template <typename T>
 void wgrad_gemm_accum_fp32_cuda(T *input, T *d_output, float *d_weight, int in_dim, int hidden_dim, int out_dim) {
+    # if defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
+    hipblasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
+    hipStream_t stream;
+    hipblasGetStream(handle, &stream);
+    # else
     cublasHandle_t handle = at::cuda::getCurrentCUDABlasHandle();
     cudaStream_t stream;
     cublasGetStream(handle, &stream);
+    # endif
+    
     const float alpha = 1.0;
     const float beta  = 1.0;
 
