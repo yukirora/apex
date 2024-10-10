@@ -229,20 +229,12 @@ class FusedScaleMaskSoftmax(torch.nn.Module):
                 self.attn_mask_type == AttnMaskType.causal
                 or self.attn_mask_type == AttnMaskType.padding
             )
-<<<<<<< HEAD
             and 16 < sk <= 16384  # sk must be 16 ~ 16384
-=======
-            and 16 < sk <= 4096  # sk must be 16 ~ 4096
->>>>>>> dev/hubertlu/run_transformer
             and sq % 4 == 0  # sq must be divisor of 4
             and sk % 4 == 0  # sk must be divisor of 4
             and attn_batches % 4 == 0  # np * b must be divisor of 4
         ):
-<<<<<<< HEAD
             if 0 <= sk <= 16384:
-=======
-            if 0 <= sk <= 4096:
->>>>>>> dev/hubertlu/run_transformer
                 batch_per_block = self.get_batch_per_block(sq, sk, b, np)
 
                 if self.attn_mask_type == AttnMaskType.causal:
