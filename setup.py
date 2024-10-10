@@ -283,7 +283,7 @@ if "--cuda_ext" in sys.argv:
     else:
         check_rocm_torch_binary_vs_bare_metal(ROCM_HOME)
 
-**********  multi-tensor apply  ****************
+#**********  multi-tensor apply  ****************
     print ("INFO: Building the multi-tensor apply extension.")
     nvcc_args_multi_tensor = ['-lineinfo', '-O3', '--use_fast_math'] + version_dependent_macros
     hipcc_args_multi_tensor = ['-O3'] + version_dependent_macros
